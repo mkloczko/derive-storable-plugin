@@ -17,7 +17,8 @@ extra-source-files:  ChangeLog.md
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Foreign.Storable.Generic.Plugin, Foreign.Storable.Generic.Plugin.Internal
+  exposed-modules:       Foreign.Storable.Generic.Plugin, Foreign.Storable.Generic.Plugin.Internal
+                       , Foreign.Storable.Generic.Plugin.SimplCore, Foreign.Storable.Generic.Plugin.Internal.InstanceDecl
   -- other-modules:       
   other-extensions:    DeriveGeneric, DeriveAnyClass, PatternGuards
   build-depends:       base >=4.9 && <4.10, ghc >= 8.0 && <8.1, ghci >=8.0 && <8.1, generic-storable 

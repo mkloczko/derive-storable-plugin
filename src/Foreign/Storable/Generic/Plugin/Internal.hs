@@ -5,21 +5,21 @@ import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
 import Var (Var(..))
-import Name (getOccName,mkOccName)
+import Name (getOccName,mkOccName, getSrcSpan)
 import qualified Name as N (varName)
-import SrcLoc (noSrcSpan)
+import SrcLoc (SrcSpan,noSrcSpan)
 import Unique (getUnique)
 -- import PrelNames (intDataConKey)
 -- import FastString (mkFastString)
 -- import TysPrim (intPrimTy)
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv)
--- import TyCoRep (Type(..))
+import TyCoRep (Type(..), TyBinder(..))
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId) 
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import GHCi.RemoteTypes  
-
+import MkCore (mkWildValBinder)
 import Unsafe.Coerce
 
 import Data.List
@@ -40,6 +40,11 @@ isAlignmentId :: CoreBind -> Bool
 isAlignmentId (NonRec ident _) = getOccName (varName ident) == mkOccName N.varName "$cgalignment" 
 isAlignmentId _                = False -- "We expect galignment to not be defined recursively.
 
+-- | Predicate used to find gpeekByteOff identifiers
+isPeekId :: CoreBind -> Bool
+isPeekId (NonRec ident _) = getOccName (varName ident) == mkOccName N.varName "$cgpeekByteOff" 
+isPeekId _                = False -- "We expect galignment to not be defined recursively.
+
 -- | Takes the gsizeOf and galignment bindings from the Core program.
 paritionBasicBinds :: CoreProgram -> ([CoreBind],[CoreBind])
 paritionBasicBinds core_prog = partition (\bind -> isSizeOfId bind || isAlignmentId bind) core_prog
@@ -49,11 +54,12 @@ paritionBasicBinds core_prog = partition (\bind -> isSizeOfId bind || isAlignmen
 ---------------------------------------------------
 --
 -- It is possible for the user to define nested instances
--- in the same module with their components. Example:
+-- in the same module with their components. For example:
 -- module Example where
 --
--- data A = A Int deriving (Generic, GStorable)
--- data B = B A   deriving (Generic, GStorable)
+--  
+-- data Flat   = Flat   Int deriving (Generic, GStorable)
+-- data Nested = Nested A   deriving (Generic, GStorable)
 --
 -- We would like to make sure that we calculate gsizeOf ang galignment first for
 -- non nested types (components from other modules are allowed in this category).
@@ -105,24 +111,25 @@ isNested ids core_bind = do
 
 -- | Organises the selected bindings into a hierarchy.
 -- See note [Organising into a hierarchy]
-intoHierarchy :: [CoreBind]   -- ^ The gsizeOf and galignemnt binds
+-- Compilation should happen while the hierarchy gets ordered.
+orderByNested :: [CoreBind]   -- ^ The gsizeOf and galignemnt binds
            -- -> [CoreBind]   -- ^ The rest of the CoreProgram bindings
               -> ([[CoreBind]], Maybe ErrorMsg) -- ^ The hierarchy, starting from non nested.
-intoHierarchy g_binds {- other_binds -} = do
+orderByNested g_binds {- other_binds -} = do
     -- Find the non_nested ones.
     let ids = concatMap getIdsBind g_binds
         predicate = not.(isNested ids)
         (non_nested,rest) = partition predicate g_binds
         -- The ordering itself
-        (ordering, m_err) = intoHierarchy_rec rest [non_nested] 
+        (ordering, m_err) = orderByNested_rec rest [non_nested] 
     (reverse ordering, m_err) 
 
-intoHierarchy_rec :: [CoreBind]   -- ^ Bindings to order 
+orderByNested_rec :: [CoreBind]   -- ^ Bindings to order 
                -- -> [CoreBind]   -- ^ All other bindings except gsizeOf and galignment
                   -> [[CoreBind]] -- ^ The accumulator with ordered bindings
                   -> ([[CoreBind]], Maybe ErrorMsg) -- ^ The end result, starting from the most nested.
-intoHierarchy_rec []                        acc = (acc, Nothing) -- all got sorted.
-intoHierarchy_rec g_binds {- other_binds -} acc = do
+orderByNested_rec []                        acc = (acc, Nothing) -- all got sorted.
+orderByNested_rec g_binds {- other_binds -} acc = do
     let ids               = concatMap getIdsBind g_binds
         predicate         = not.(isNested ids)
         (new_layer, rest) = partition predicate g_binds
@@ -134,24 +141,39 @@ intoHierarchy_rec g_binds {- other_binds -} acc = do
             -- what did go wrong?
         let error_msg = OrderingFailed (length acc) rest
         (acc, Just error_msg)
-    else intoHierarchy_rec rest (new_layer:acc) 
+    else orderByNested_rec rest (new_layer:acc) 
 
 
 -- We got hierarchy. noow..
 
-compileExpr :: HscEnv -> CoreExpr -> IO a 
-compileExpr hsc_env expr = do
-    foreign_hval <- liftIO $ hscCompileCoreExpr hsc_env noSrcSpan expr
+compileExpr :: HscEnv -> CoreExpr -> SrcSpan -> IO a 
+compileExpr hsc_env expr src_span = do
+    foreign_hval <- liftIO $ hscCompileCoreExpr hsc_env src_span expr
     hval         <- liftIO $ withForeignRef foreign_hval localRef
     let val = unsafeCoerce hval :: a 
     -- finalizeForeignRef foreign_hval  -- check whether that's the source of the error
     return val
 
-intToExpr :: Int -> CoreExpr
-intToExpr i = App fun arg
+intToExpr :: Type -> Int -> CoreExpr
+intToExpr t i = Lam wild $ App fun arg
     where fun = Var $ dataConWorkId intDataCon
           arg = Lit $ MachInt $ fromIntegral i
+          wild= mkWildValBinder t 
+-- | Get the 'a' from 'a -> b' types.
+getFirstArgument :: Id -> Maybe Type
+getFirstArgument id
+    | (ForAllTy tb t) <- varType id
+    , Anon t_ok <- tb
+    = Just t_ok
+    | otherwise = Nothing
 
+isWhat :: Type -> String
+isWhat (AppTy t1 _) = "app ty " ++ showSDocUnsafe (ppr t1)
+isWhat (TyVarTy t ) = "tyvarty " ++ showSDocUnsafe (ppr t)
+isWhat (TyConApp t ts ) = "tyconapp " ++ showSDocUnsafe (cat [ppr t, ppr ts] )
+isWhat (ForAllTy tb t ) = "forallTy " ++ showSDocUnsafe (cat$ [ppr tb,ppr t])
+isWhat (LitTy t ) = "LitTy " ++ showSDocUnsafe (ppr t)
+isWhat otherwise  = "bla"
 -- | Assumes that the expression is of Lambda app 
 --
 intSubstitution :: HscEnv -> CoreBind -> IO CoreBind
@@ -160,20 +182,26 @@ intSubstitution hsc_env e@(NonRec id (Lam _ (Lam _ _))) = trace "too much lambda
 intSubstitution hsc_env e@(NonRec id (Lam _ expr)) = do
     -- putStrLn "Trying to compile something..."
     -- putStrLn $ showSDocUnsafe $ ppr e 
-    the_integer <- compileExpr hsc_env expr :: IO Int
-    putStrLn $ "Got expression: " ++ (showSDocUnsafe $ cat [ppr $ getIdsBind e, ppr $ map varType (getIdsBind e)])
-    -- putStrLn $ showSDocUnsafe $ ppr e 
-    putStrLn $ "Now it is: " ++ show the_integer 
-    putStrLn $ showSDocUnsafe $ ppr (NonRec id (intToExpr the_integer))
-    putStrLn $ ""
-
-    return $ NonRec id (intToExpr the_integer)
-
+    the_integer <- compileExpr hsc_env expr (getSrcSpan id) :: IO Int
+    -- putStrLn $ "Got expression: " ++ (showSDocUnsafe $ cat [ppr $ getIdsBind e, ppr $ map varType (getIdsBind e)])
+    -- putStrLn $ "With type " ++ (showSDocUnsafe $ cat [ppr $ varType id])
+    -- putStrLn $ "typetyp " ++ ((isWhat.varType) id)
+    -- putStrLn $ showSDocUnsafe $ ppr e
+    let m_t      = getFirstArgument id 
+    case m_t of
+        Just t -> do
+            -- putStrLn $ "Now it is: " ++ show the_integer 
+            -- putStrLn $ showSDocUnsafe $ ppr (NonRec id (intToExpr t the_integer))
+            -- putStrLn $ ""
+            return $ NonRec id (intToExpr t the_integer)
+        Nothing -> return e
 -- | Substitutes the localIds inside the expression with bodies of provided bindings.
 -- exprSubstitution :: [CoreBind]  -- ^ Provided bindings.
 --                  -> CoreBind    -- ^ The binding which will be transformed
 --                  -> CoreBind    -- ^ Transformed result.
 -- exprSubstitution provided_binds the_bind = 
+
+-- There's a problem with recursive bindings.
 
 replaceIdsBind :: [CoreBind] -> CoreBind -> CoreBind
 replaceIdsBind prov_bs (NonRec id e) = NonRec id (replaceIds prov_bs e)
@@ -203,7 +231,7 @@ replaceIds prov_bs e          = e
 forceCompileTimeEvaluation :: HscEnv -> CoreProgram -> IO CoreProgram
 forceCompileTimeEvaluation hsc_env core_prog = do
     let (gmethods, rest) = paritionBasicBinds core_prog
-        (grouped, e_msg) = intoHierarchy gmethods
+        (grouped, e_msg) = orderByNested gmethods
         err_rest = case e_msg of 
             Just (OrderingFailed _ bs) -> bs
             Nothing -> []
@@ -216,10 +244,12 @@ forceCompileTimeEvaluation hsc_env core_prog = do
     --
     putStrLn $ "Found methods: " ++ showSDocUnsafe (ppr $ map getIdsBind gmethods)
     putStrLn $ "With uniques: "  ++ showSDocUnsafe (ppr $ map ((map getUnique).getIdsBind) gmethods)
-    putStrLn $ "Got groups: "    ++ showSDocUnsafe (ppr $ map (map getIdsBind) grouped)
+    let mapped = map (map (\b -> (getIdsBind b, map varType (getIdsBind b) ) ) ) grouped
+    putStrLn $ "Got groups:\n"    ++ concatMap (\x -> (showSDocUnsafe.ppr) x ++ "\n") mapped
     --
     compiled <- compileGroups hsc_env grouped rest
     return $ concat [compiled, err_rest, rest]
+
 compileGroups :: HscEnv
               -> [[CoreBind]]  -- ^ Grouped bindings
               -> [CoreBind]    -- ^ Rest of local bindings
