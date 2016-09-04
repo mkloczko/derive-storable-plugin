@@ -45,7 +45,7 @@ install opts todo = do
     putMsgS "Yaay"
     the_ioref <- liftIO $ newIORef []
     let (before,after)   = splitAt 0 todo
-        (after',after'') = splitAt 5 after
+        (after',after'') = splitAt 4 after
         ordering   = orderingPass     flags the_ioref
         printing   = printIORefPass         the_ioref
         substitute = substitutionPass flags the_ioref

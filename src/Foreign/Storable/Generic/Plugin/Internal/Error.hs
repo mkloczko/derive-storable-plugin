@@ -21,10 +21,11 @@ data Flags = Flags Verbosity CrashOnWarning
 data Error = TypeNotFound Id     -- ^ Could not obtain the type from the id.
            | RecBinding CoreBind -- ^ The binding is recursive and won't be substituted.
            | CompilationNotSupported CoreBind -- ^ The compilation-substitution is not supported for this.
-           | CompilationError        CoreBind
+           | CompilationError        CoreBind String
            | CompilationErrorExpr    CoreExpr
            | OrderingFailedBinds Int [CoreBind]
            | OrderingFailedTypes Int [Type]
+           | OtherError          String
 
 -- | How to print type not found
 pprTypeNotFound :: Verbosity -> Id -> SDoc
@@ -68,14 +69,17 @@ pprCompilationNotSupported All  bind
 
 
 -- | Printing CompilationError error
-pprCompilationError :: Verbosity -> CoreBind -> SDoc
-pprCompilationError None _   = empty
-pprCompilationError Some bind 
+pprCompilationError :: Verbosity -> CoreBind -> String -> SDoc
+pprCompilationError None _ _  = empty
+pprCompilationError Some bind str
     =    text "Compilation failed for the following binding: "
       $$ nest 5 (vcat ppr_ids)
+      $$ nest 5 (text "The error was:" $$ nest 5 (text str))
     where ppr_ids = map (\id -> ppr id <+> text "::" <+> ppr (varType id) ) $ getIdsBind bind
-pprCompilationError All  bind 
+pprCompilationError All  bind str
     =     text "--- Compilation failed for the following binding ---"
+      $+$ text "Error message: "
+      $+$ text str
       $+$ ppr bind 
       $+$ text "------"
 
@@ -101,12 +105,15 @@ pprOrderingFailedBinds All  depth binds
       $+$ text "------"
     where ppr_binds = map ppr binds
 
-
+pprOtherError :: Verbosity -> String -> SDoc
+pprOtherError None _   = empty
+pprOtherError _    str = text str
 
 pprError :: Verbosity -> Error -> SDoc
 pprError verb (TypeNotFound            id  ) = pprTypeNotFound verb id
 pprError verb (RecBinding              bind) = pprRecBinding   verb bind
 pprError verb (CompilationNotSupported bind) = pprCompilationNotSupported verb bind
-pprError verb (CompilationError        bind) = pprCompilationError verb bind
-pprError verb (OrderingFailedBinds  d  bs  ) = pprOrderingFailedBinds verb d bs
-pprError verb (OrderingFailedTypes  d  ts  ) = pprOrderingFailedTypes verb d ts
+pprError verb (CompilationError    bind str) = pprCompilationError verb bind str
+pprError verb (OrderingFailedBinds d    bs) = pprOrderingFailedBinds verb d bs
+pprError verb (OrderingFailedTypes d    ts) = pprOrderingFailedTypes verb d ts
+pprError verb (OtherError          str    ) = pprOtherError          verb str
