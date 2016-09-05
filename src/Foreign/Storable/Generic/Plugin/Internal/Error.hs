@@ -21,18 +21,18 @@ data Flags = Flags Verbosity CrashOnWarning
 data Error = TypeNotFound Id     -- ^ Could not obtain the type from the id.
            | RecBinding CoreBind -- ^ The binding is recursive and won't be substituted.
            | CompilationNotSupported CoreBind -- ^ The compilation-substitution is not supported for this.
-           | CompilationError        CoreBind String
+           | CompilationError        CoreBind SDoc
            | CompilationErrorExpr    CoreExpr
            | OrderingFailedBinds Int [CoreBind]
            | OrderingFailedTypes Int [Type]
-           | OtherError          String
+           | OtherError          SDoc
 
 -- | How to print type not found
 pprTypeNotFound :: Verbosity -> Id -> SDoc
 pprTypeNotFound None _  = empty 
 pprTypeNotFound Some id 
     =    text "Could not obtain the type from" 
-      $$ nest 5 (ppr id <+> text "::" <+> ppr (varType id) )  
+      $$ nest 4 (ppr id <+> text "::" <+> ppr (varType id) )  
 pprTypeNotFound All id  = pprTypeNotFound Some id
 
 -- | Printing RecBinding error
@@ -40,55 +40,60 @@ pprRecBinding :: Verbosity -> CoreBind -> SDoc
 pprRecBinding None _ = empty
 pprRecBinding Some (Rec bs) 
     =    text "The binding is recursive and won't be substituted"
-      $$ nest 5 (vcat ppr_ids)
+      $$ nest 4 (vcat ppr_ids)
     where ppr_ids = map (\(id,_) -> ppr id <+> text "::" <+> ppr (varType id) ) bs
 pprRecBinding Some (NonRec id _) 
     =    text "RecBinding error for non recursive binding...?"
-      $$ nest 5 (ppr id <+> text "::" <+> ppr (varType id) )  
+      $$ nest 4 (ppr id <+> text "::" <+> ppr (varType id) )  
 pprRecBinding All  b@(Rec _) 
     =     text "--- The binding is recursive and won't be substituted ---"
-      $+$ ppr b
-      $+$ text "------"
+      $+$ text ""
+      $+$ nest 4 (ppr b)
+      $+$ text ""
 pprRecBinding All  b@(NonRec _ _) 
-    =     text "--- RecBinding error for non recursibe binding ? ---"
-      $+$ ppr b
-      $+$ text "------"
+    =     text "--- RecBinding error for non recursive binding ? ---"
+      $+$ text ""
+      $+$ nest 4 (ppr b)
+      $+$ text ""
 
 -- | Printing CompilationNotSupported error
 pprCompilationNotSupported :: Verbosity -> CoreBind -> SDoc
 pprCompilationNotSupported None _   = empty
 pprCompilationNotSupported Some bind 
     =    text "Compilation is not supported for bindings of the following format: "
-      $$ nest 5 (vcat ppr_ids)
+      $$ nest 4 (vcat ppr_ids)
     where ppr_ids = map (\id -> ppr id <+> text "::" <+> ppr (varType id) ) $ getIdsBind bind
 pprCompilationNotSupported All  bind 
     =     text "--- Compilation is not supported for bindings of the following format ---"
-      $+$ ppr bind 
-      $+$ text "------"
+      $+$ text ""
+      $+$ nest 4 (ppr bind) 
+      $+$ text ""
 
 
 
 -- | Printing CompilationError error
-pprCompilationError :: Verbosity -> CoreBind -> String -> SDoc
+pprCompilationError :: Verbosity -> CoreBind -> SDoc -> SDoc
 pprCompilationError None _ _  = empty
-pprCompilationError Some bind str
+pprCompilationError Some bind sdoc
     =    text "Compilation failed for the following binding: "
-      $$ nest 5 (vcat ppr_ids)
-      $$ nest 5 (text "The error was:" $$ nest 5 (text str))
+      $$ nest 4 (vcat ppr_ids)
+      $$ nest 4 (text "The error was:" $$ nest 5 sdoc)
     where ppr_ids = map (\id -> ppr id <+> text "::" <+> ppr (varType id) ) $ getIdsBind bind
-pprCompilationError All  bind str
+pprCompilationError All  bind sdoc
     =     text "--- Compilation failed for the following binding ---"
-      $+$ text "Error message: "
-      $+$ text str
-      $+$ ppr bind 
-      $+$ text "------"
+      $+$ text ""
+      $+$ nest 4 (text "Error message: ")
+      $+$ nest 4 sdoc
+      $+$ text ""
+      $+$ nest 4 (ppr bind) 
+      $+$ text ""
 
 -- | Printing OrderingFailedTypes error
 pprOrderingFailedTypes :: Verbosity -> Int -> [Type] -> SDoc
 pprOrderingFailedTypes None _ _ = empty
 pprOrderingFailedTypes Some depth types 
     =    text "Type ordering failed at depth" <+> int depth <+> text "for types:"
-      $$ nest 5 (vcat ppr_types)
+      $$ nest 4 (vcat ppr_types)
     where ppr_types = map ppr types
 pprOrderingFailedTypes All  depth types = pprOrderingFailedTypes Some depth types
 
@@ -97,17 +102,18 @@ pprOrderingFailedBinds :: Verbosity -> Int -> [CoreBind] -> SDoc
 pprOrderingFailedBinds None _ _ = empty
 pprOrderingFailedBinds Some depth binds 
     =    text "CoreBind ordering failed at depth" <+> int depth <+> text "for bindings:"
-      $$ nest 5 (vcat ppr_ids)
+      $$ nest 4 (vcat ppr_ids)
     where ppr_ids = map (\id -> ppr id <+> text "::" <+> ppr (varType id) ) $ concatMap getIdsBind binds
 pprOrderingFailedBinds All  depth binds
     =     text "--- CoreBind ordering failed at depth" <+> int depth <+> text "for bindings ---"
-      $+$ nest 5 (vcat ppr_binds)
-      $+$ text "------"
+      $+$ text "\n"
+      $+$ nest 4 (vcat ppr_binds)
+      $+$ text ""
     where ppr_binds = map ppr binds
-
-pprOtherError :: Verbosity -> String -> SDoc
+-- | Printing OtherError.
+pprOtherError :: Verbosity -> SDoc -> SDoc
 pprOtherError None _   = empty
-pprOtherError _    str = text str
+pprOtherError _    sdoc = sdoc
 
 pprError :: Verbosity -> Error -> SDoc
 pprError verb (TypeNotFound            id  ) = pprTypeNotFound verb id
@@ -116,4 +122,26 @@ pprError verb (CompilationNotSupported bind) = pprCompilationNotSupported verb b
 pprError verb (CompilationError    bind str) = pprCompilationError verb bind str
 pprError verb (OrderingFailedBinds d    bs) = pprOrderingFailedBinds verb d bs
 pprError verb (OrderingFailedTypes d    ts) = pprOrderingFailedTypes verb d ts
-pprError verb (OtherError          str    ) = pprOtherError          verb str
+pprError verb (OtherError          sdoc   ) = pprOtherError          verb sdoc
+
+
+-- | Change String to SDoc.
+-- Each newline is $$ed with nest equal to spaces before.
+-- \t is 4.
+stringToPpr :: String -> SDoc
+stringToPpr str = do
+    -- Whether to take a letter
+    let taker   ' ' = True
+        taker  '\t' = True
+        taker  _    = False
+    -- Whether to 
+        to_num  ' ' = 1
+        to_num '\t' = 4
+        to_num _    = 0
+    -- Function doing the nesting
+    let nest_text str = do
+            let whites = takeWhile taker str
+                rest   = dropWhile taker str
+                num    = sum $ map to_num whites
+            nest num $ text rest
+    vcat $ map nest_text $ lines str

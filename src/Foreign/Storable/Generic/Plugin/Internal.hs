@@ -32,7 +32,8 @@ import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import Outputable (($$), ($+$), vcat, empty,text, (<>), (<+>), nest, int) 
 import CoreMonad (putMsg, putMsgS, CoreM)
 
-
+import TyCon
+import DataCon
 import TyCon (tyConKind)
 
 import Data.List
@@ -61,7 +62,7 @@ groupTypes_errors flags errors = do
         print_header txt = case verb of
             None  -> empty
             other ->    text "Errors while grouping types - types not found for: "
-                     $$ nest 5 txt
+                     $$ nest 4 txt
         print_tyNotF verb id = case verb of
             None  -> empty
             other -> ppr id $$ nest 13 (text "::") <+> ppr (varType id)
@@ -76,13 +77,15 @@ groupTypes_errors flags errors = do
     printer errors
     when to_crash $ crasher errors
 
-
 groupTypes :: Flags -> IORef [[Type]] -> ModGuts -> CoreM ModGuts
 groupTypes flags type_order_ref guts = do
     let binds = mg_binds guts
-        -- Get GStorable ids.
+        -- Get GStorable ids that are fully defined.
         all_ids = concatMap getIdsBind binds
-        gstorable_ids = filter isAnyGStorable all_ids
+        predicate id = and [ isGStorableId id
+                           , not (hasGStorableConstraints $ varType id)
+                           ]
+        gstorable_ids = filter predicate all_ids
         -- Now process them - different ids
         -- will have different type signatures.
         -- It is possible to fetch the types from them.
@@ -97,7 +100,10 @@ groupTypes flags type_order_ref guts = do
         -- Calculate the type ordering.
         (type_order,m_error) = calcGroupOrder type_list
         -- TODO: Do something with failed ordering.
-
+    
+    putMsgS $ "Types debugging"
+    putMsg $ vcat $ map (\t -> ppr t <+> ppr (getDataConArgs t)) type_list
+    -- putMsg $ vcat $ map (\t -> ppr t <+> ppr (getDataConArgs' t)) type_list
     groupTypes_errors flags weird_types
     
     liftIO $ writeIORef type_order_ref type_order
@@ -140,10 +146,13 @@ gstorableSubstitution :: Flags -> IORef [[Type]] -> ModGuts -> CoreM ModGuts
 gstorableSubstitution flags type_order_ref guts = do 
     type_hierarchy <- liftIO $ readIORef type_order_ref 
     let binds  = mg_binds guts
-        -- Doing it in one pass.
-        -- predicate = toIsBind (withTypeCheck getGStorableType isGStorableMethodId)
-        predicate = toIsBind (withTypeCheck getGStorableMethodType isGStorableMethodId)
-        -- predicate = toIsBind isGStorableMethodId
+        -- Get all GStorable binds.
+        -- Check whether the type has no constraints.
+        typeCheck t = if hasGStorableConstraints t
+            then Nothing
+            else getGStorableMethodType t
+        predicate = toIsBind (withTypeCheck typeCheck isGStorableMethodId)
+        
         (gstorable_binds,rest) = partition predicate binds
         -- Check if there are any recursives somehow
         -- The plugin won't be able to handle them.
@@ -151,7 +160,6 @@ gstorableSubstitution flags type_order_ref guts = do
         -- Group the gstorables by nestedness
         (grouped_binds, m_err_group) = groupBinds type_hierarchy nonrecs
     
-
     -- Check for errors
     not_grouped <- grouping_errors flags m_err_group
     -- Compile and replace gstorable bindings

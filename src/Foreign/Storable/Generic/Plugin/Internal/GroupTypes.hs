@@ -28,6 +28,7 @@ import DataCon    (dataConWorkId,dataConOrigArgTys)
 import MkCore (mkWildValBinder)
 -- Printing
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
+import Outputable (text, (<+>), ($$), nest)
 import CoreMonad (putMsg, putMsgS)
 
 -- Used to get to compiled values
@@ -48,6 +49,14 @@ import Foreign.Storable.Generic.Plugin.Internal.Helpers
 import Foreign.Storable.Generic.Plugin.Internal.Predicates
 import Foreign.Storable.Generic.Plugin.Internal.Types
 
+
+-- | Reduce the list of types to list of unique types
+uniqueTypes :: [Type] -> [Type]
+uniqueTypes types = foldl' foldl_fun [] types 
+    where foldl_fun acc t = if t `elemType` acc
+              then acc
+              else t:acc
+
 -- | Calculate the order of types. 
 calcGroupOrder :: [Type] -> ([[Type]], Maybe Error)
 calcGroupOrder types = calcGroupOrder_rec types []
@@ -58,10 +67,10 @@ calcGroupOrder_rec :: [Type]
 calcGroupOrder_rec []    acc = (reverse acc, Nothing)
 calcGroupOrder_rec types acc = do
     let (layer, rest) = calcGroupOrder_iteration types [] [] []
-
-    if length layer == 0
+        layer'       = uniqueTypes layer
+    if length layer' == 0
         then (reverse acc, Just $ OrderingFailedTypes (length acc) rest)
-        else calcGroupOrder_rec rest (layer:acc)
+        else calcGroupOrder_rec rest (layer':acc)
 
 -- | This could be done more efficently if we'd 
 -- represent the problem as a graph problem.
@@ -79,6 +88,24 @@ calcGroupOrder_iteration (t:ts) checked accepted rejected = do
     if is_arg_somewhere
         then calcGroupOrder_iteration ts (t:checked)  accepted    (t:rejected)
         else calcGroupOrder_iteration ts (t:checked) (t:accepted)  rejected
+
+-- type TypeScope = (TyVar, Type)
+-- 
+-- -- | Get data constructor arguments from an algebraic type.
+-- -- getDataConArgs' :: Type -> [Type]
+-- getDataConArgs' t 
+--     | isAlgType t
+--     -- TODO: Inspect the arguments of type constructor
+--     -- Perhaps one could put them inside the 
+--     , Just (tc, ty_args) <- splitTyConApp_maybe t
+--     , ty_vars <- tyConTyVars tc
+--     = do
+--     let type_scope = zip ty_vars ty_args
+--         data_cons  = concatMap dataConOrigArgTys $ (visibleDataCons.algTyConRhs) tc
+--         
+--     -- = tyConTyVars tc
+--     -- TODO: Handle type synonyms and type family instances
+--     | otherwise = []
 
 -- | Get data constructor arguments from an algebraic type.
 getDataConArgs :: Type -> [Type]
@@ -107,6 +134,9 @@ groupBinds_rec :: [[Type]]
                -> [[CoreBind]]
                -> ([[CoreBind]], Maybe Error)
 groupBinds_rec []       []    acc = (reverse acc,Nothing)
+groupBinds_rec (a:as)   []    acc = (reverse acc,Just $ OtherError msg)
+    where msg =    text "Could not find any bindings." 
+                $$ text "Is the second pass placed after main simplifier phases ?" 
 groupBinds_rec []       binds acc = (reverse acc,Just $ OrderingFailedBinds (length acc) binds)
 groupBinds_rec (tg:tgs) binds acc = do
     let predicate (NonRec id _) = case getGStorableType $ varType id of

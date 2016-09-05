@@ -7,7 +7,7 @@ import Id  (isLocalId, isGlobalId,Id)
 import Var (Var(..))
 import Name (getOccName,mkOccName)
 import OccName (OccName(..), occNameString)
-import qualified Name as N (varName)
+import qualified Name as N (varName,tcClsName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
 -- import PrelNames (intDataConKey)
@@ -92,6 +92,10 @@ isRealWorldType _                = False
 isRealWorldTyCon :: TyCon -> Bool
 isRealWorldTyCon rw = getUnique rw == realWorldTyConKey
 
+-- | Check whether the type constuctor is a GStorable
+isGStorableInstTyCon :: TyCon -> Bool
+isGStorableInstTyCon tc = getOccName (tyConName tc) == mkOccName N.tcClsName "GStorable" 
+
 -- | Check whether the type is of kind * -> Constraint.
 hasConstraintKind :: Type -> Bool
 hasConstraintKind ty 
@@ -101,7 +105,18 @@ hasConstraintKind ty
     = constraintKindTyCon == k_tc
     | otherwise = False
 
--- | Check whether the 
+-- | Check whether the type has GStorable constraints.
+hasGStorableConstraints :: Type -> Bool
+hasGStorableConstraints t
+    | ForAllTy bind next  <- t
+    , Anon gstorable_cons <- bind
+    , hasConstraintKind gstorable_cons
+    , TyConApp gstorable_tc [_] <- gstorable_cons
+    , isGStorableInstTyCon gstorable_tc
+    = True
+    | ForAllTy _ next <- t
+    = hasGStorableConstraints next
+    | otherwise = False
 
 
 -- | Get the type from GStorable instance.

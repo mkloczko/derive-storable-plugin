@@ -7,7 +7,7 @@ import Id  (isLocalId, isGlobalId,Id)
 import Var (Var(..))
 import Name (getOccName,mkOccName, getSrcSpan)
 import OccName (OccName(..), occNameString)
-import qualified Name as N (varName)
+import qualified Name as N (varName, tvName, tcClsName)
 import SrcLoc (noSrcSpan, SrcSpan)
 import Unique (getUnique)
 -- import PrelNames (intDataConKey)
@@ -21,7 +21,7 @@ import CoreLint (lintExpr)
 import BasicTypes (CompilerPhase(..))
 -- Haskell types 
 import Type (isAlgType, splitTyConApp_maybe)
-import TyCon (algTyConRhs, visibleDataCons)
+import TyCon (tyConName, algTyConRhs, visibleDataCons)
 import TyCoRep (Type(..), TyBinder(..))
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
@@ -74,7 +74,7 @@ tryCompileExpr id core_expr  = do
     e_compiled <- liftIO $ try $ 
                     compileExpr hsc_env core_expr (getSrcSpan id) :: CoreM (Either SomeException a)
     case e_compiled of
-        Left  se  -> return $ Left $ CompilationError (NonRec id core_expr) (show se)
+        Left  se  -> return $ Left $ CompilationError (NonRec id core_expr) (stringToPpr $ show se)
         Right val-> return $ Right val
 
 ----------------------
@@ -90,9 +90,9 @@ intToExpr t i = Lam wild $ App fun arg
 
 -- | For gsizeOf and galignment - calculate the variables.
 intSubstitution :: CoreBind -> CoreM (Either Error CoreBind)
-intSubstitution e@(Rec    _) = return $ Left $ CompilationNotSupported e
-intSubstitution e@(NonRec id (Lam _ (Lam _ _))) = return $ Left $ CompilationNotSupported e 
-intSubstitution e@(NonRec id (Lam _ expr)) = do
+intSubstitution b@(Rec    _) = return $ Left $ CompilationNotSupported b
+intSubstitution b@(NonRec id (Lam _ (Lam _ _))) = return $ Left $ CompilationNotSupported b 
+intSubstitution b@(NonRec id (Lam _ expr)) = do
     -- Get HscEnv
     hsc_env     <- getHscEnv
     -- Try the subtitution.
@@ -103,7 +103,7 @@ intSubstitution e@(NonRec id (Lam _ expr)) = do
         Just t ->  return $ NonRec id <$> (intToExpr t <$> the_integer)
         -- If the compilation error occured, first return it.
         Nothing -> 
-            return the_integer >> return $ Left $ CompilationError e "No type found"
+            return the_integer >> return $ Left $ CompilationError b (text "Type not found")
 
 -----------------------
 -- peek substitution --
@@ -113,15 +113,25 @@ intSubstitution e@(NonRec id (Lam _ expr)) = do
 offsetSubstitution :: CoreBind -> CoreM (Either Error CoreBind)
 offsetSubstitution b@(Rec _) = return $ Left $ CompilationNotSupported b
 offsetSubstitution b@(NonRec id expr) = do
-    putMsgS "Before"
-    putMsg $ ppr expr
+    let print_expr e = putMsg $ ppr e 
+        is_case4     = case getPokeType (varType id) of
+            Just (TyConApp tc _)  -> trace (showSDocUnsafe $ ppr tc) $ getOccName (tyConName tc) == mkOccName N.tcClsName "C4"
+            _ -> False
+
+    when is_case4 $ putMsgS "Before" >> print_expr expr
+    
     e_subs <- offsetSubstitutionTree [] expr
     let ne_subs = case e_subs of
-             Left (OtherError str) -> Left $ CompilationError b str
-             a                     -> a
+             -- Add the text from other error.
+             Left (OtherError sdoc) 
+                 -> Left $ CompilationError b sdoc
+             -- Add the information about uncompiled expr.
+             Left err@(CompilationError _ _) 
+                 -> Left $ CompilationError b (pprError Some err)
+             a   -> a
     case e_subs of
-        Right e -> putMsgS "After" >> putMsg (ppr e)
-        _       -> return ()
+       Right e -> when is_case4 $ putMsgS "After" >> print_expr e
+       _       -> return ()
     return $ NonRec id <$> e_subs
 
 
@@ -276,10 +286,10 @@ caseExprIndex scope expr
     | App beg lit <- expr
     -- Substitute or leave the literal be.
     , Just lit_expr <- inScopeVal scope lit <|> isLitOrGlobal lit
-    , App beg2 offsets <- trace "Got lit_expr" $ beg
+    , App beg2 offsets <- beg
     -- Substitute or leave the offsets list free.
-    , Just list_expr <- trace (showSDocUnsafe $ ppr scope <+> exprInspect offsets) $ inScopeList scope offsets <|> Just offsets
-    , App ix_var t_int <- trace "Got list expr!" beg2
+    , Just list_expr <- inScopeList scope offsets <|> Just offsets
+    , App ix_var t_int <- beg2
     -- Get to the !! var.
     , Var ix_id    <- ix_var
     -- Chech whether types are ok.
@@ -322,14 +332,15 @@ offsetSubstitutionTree scope e@(Var  _  )    = do
     let m_subs = inScope scope e
     -- Assuming that the first Just will be chosen.
         new_e = m_subs <|> Just e
-    case m_subs of
-        Nothing -> return ()
-        Just expr -> do 
-            putMsg $ text "Found sub!" <+> ppr expr
-            putMsg $ text "scope" <+> ppr scope
+    -- case m_subs of
+    --     Nothing -> return ()
+    --     Just expr -> do 
+    --         putMsg $ text "Found sub!" <+> ppr expr
+    --         putMsg $ text "scope" <+> ppr scope
     case new_e of
         Just e -> return $ Right e
-        Nothing -> return $ Left $ OtherError "No alternative to itself for an expression"
+        Nothing -> return $ Left $ OtherError  (text  "This shouldn't happen."
+                                    $$ text "`m_subs <|> Just e` cannot be `Nothing`.")
 -- Literal. Return it.
 offsetSubstitutionTree scope e@(Lit  _  )    = return $ Right e
 -- Do substitutions for both left and right side of an application.
@@ -355,14 +366,14 @@ offsetSubstitutionTree scope expr
     , isOffsetsId offset_id
     = do 
       e_new_s <- exprToIntList offset_id offset_expr
-      putMsgS "Got offsets!"
+      -- putMsgS "Got offsets!"
       case e_new_s of
           Left err       -> return $ Left err
-          Right int_list -> putMsg (ppr int_list) >> offsetSubstitutionTree (int_list:scope) case_expr
+          Right int_list -> offsetSubstitutionTree (int_list:scope) case_expr
     -- Normal let bindings 
     | Let bind in_expr <- expr
     = do 
-      putMsgS "Let binding.."
+      -- putMsgS "Let binding.."
       subs <- offsetSubstitutionTree scope in_expr
       return $ Let bind <$> subs
     -- Parse case expr of _ I# x# -> ... expressions.
@@ -374,11 +385,14 @@ offsetSubstitutionTree scope expr
     -- this expression _should_ be compileable.
     , Just new_case_expr <- caseExprIndex scope case_expr
     = do 
-      putMsgS "Whee"
+      -- putMsgS "Whee"
       e_new_s <- exprToIntVal x_id new_case_expr 
       case e_new_s of
           Left err       -> return $ Left err
-          Right int_val  -> putMsg (ppr int_val) >> offsetSubstitutionTree (int_val:scope) alt_expr
+          Right int_val  ->  offsetSubstitutionTree (int_val:scope) alt_expr
+    
+    -- TO DELETE
+    
     -- Parse case expr of wild [] -> ...; : w1 w2 -> ...
     -- expressions.
     -- Compile case_expr and put it in scope as wild.
@@ -398,7 +412,7 @@ offsetSubstitutionTree scope expr
     -- Check whether it is complieable.
     , isBuildExpr case_expr
     = do 
-      putMsgS "I build!"
+      -- putMsgS "I build!"
       -- Compile the case_expr
       -- Perhaps substitutions might be needed ?
       e_compiled_case_expr <- tryCompileExpr wild case_expr :: CoreM (Either Error [(Int,Int)])
@@ -431,16 +445,17 @@ offsetSubstitutionTree scope expr
     -- Normal case expressions. 
     | Case case_expr cb t alts <- expr
     = do
-        putMsg $ text "casey casey" <+> ppr case_expr <+> ppr t <+> ppr scope
+        -- putMsg $ text "casey casey" <+> ppr case_expr <+> ppr t <+> ppr scope
         e_new_alts <- mapM (\(a, args, a_expr) -> (,,) a args <$> offsetSubstitutionTree scope a_expr) alts
         new_case_expr <- offsetSubstitutionTree scope case_expr
-        let err = find (\(_,_,e) -> isLeft e) e_new_alts
-        case err of
+        -- Find the first error in alternative compilation
+        let c_err = find (\(_,_,e) -> isLeft e) e_new_alts
+        case c_err of
             Nothing -> return $ Case <$> new_case_expr 
                 <*> pure cb <*> pure t <*> pure [(a,b,ne) | (a,b,Right ne)  <- e_new_alts]
             Just (_,_,err) -> return err
-            Just _  -> return $ Left $ OtherError "errroror"
-    | otherwise = return $ Left $ OtherError $ "bye " ++ showSDocUnsafe (ppr expr)
+    | otherwise = return $ Left $ OtherError $ (text "Unsupported expression:" $$ ppr expr)
+
 -----------------
 -- compilation --
 -----------------
@@ -458,16 +473,17 @@ compileGStorableBind core_bind
     | (NonRec id expr) <- core_bind
     , isAlignmentId id  
     = intSubstitution core_bind
-    -- TODO: Substitute peek binds
+    -- Substitute offsets in peeks.
     | (NonRec id expr) <- core_bind
     , isPeekId id
+    -- = return $ Right core_bind -- offsetSubstitution core_bind
     = offsetSubstitution core_bind
-    -- TODO: Substitute poke binds
+    -- Substitute offsets in pokes.
     | (NonRec id expr) <- core_bind
     , isPokeId id
-    = return $ Right core_bind
+    -- = return $ Right core_bind
+    = offsetSubstitution core_bind
     -- Everything else - nope.
-    -- Perhaps warn/crash.
     | otherwise = return $ Left $ CompilationNotSupported core_bind
 
 
@@ -517,48 +533,67 @@ replaceIds gstorable_bs other_bs (Cast e c) = Cast (replaceIds gstorable_bs othe
 replaceIds gstorable_bs other_bs (Tick t e) = Tick t (replaceIds gstorable_bs other_bs e)
 replaceIds gstorable_bs other_bs e          = e
 
-
-compileGroups :: Flags 
-              -> [[CoreBind]] 
-              -> [CoreBind] 
-              -> CoreM [CoreBind]
+-- | Compile ordered binding.
+compileGroups :: Flags            -- ^ Error handling.
+              -> [[CoreBind]]     -- ^ Ordered gstorable bindings.
+              -> [CoreBind]       -- ^ Non-gstorable bindings, used for replacing ids.
+              -> CoreM [CoreBind] -- ^ The compiled (or not) bindings.
 compileGroups flags bind_groups bind_rest = compileGroups_rec flags 0 bind_groups bind_rest [] []
 
 
-compileGroups_rec :: Flags
-                  -> Int -- ^ Depth, usefull for debugging.
-                  -> [[CoreBind]] 
-                  -> [CoreBind] 
-                  -> [CoreBind] 
-                  -> [CoreBind] 
+-- | The insides of compileGroups method.
+compileGroups_rec :: Flags         -- ^ For error handling.
+                  -> Int           -- ^ Depth, usefull for debugging.
+                  -> [[CoreBind]]  -- ^ Ordered GStorable bindings. 
+                  -> [CoreBind]    -- ^ Other top-level bindings
+                  -> [CoreBind]    -- ^ Succesfull substitutions.
+                  -> [CoreBind]    -- ^ Unsuccesfull substitutions.
                   -> CoreM [CoreBind]
 compileGroups_rec flags _ []       bind_rest subs not_subs = return $ concat [subs,not_subs]
 compileGroups_rec flags d (bg:bgs) bind_rest subs not_subs = do
     let layer_replaced = map (replaceIdsBind bind_rest subs) bg
+    -- Compile (and lint TODO)
     e_compiled <- mapM compileGStorableBind layer_replaced
     let errors = lefts e_compiled
-        -- Perhaps lint compilex expressions ?
         compiled  = rights e_compiled 
+    
+    -- Handle errors    
     not_compiled <- compileGroups_error flags d errors
+    -- Next iteration.
     compileGroups_rec flags (d+1) bgs bind_rest (concat [compiled,subs]) (concat [not_compiled, not_subs])
 
-compileGroups_error :: Flags -> Int -> [Error] -> CoreM [CoreBind]
+-- | Handle errors during the compileGroups stage.
+compileGroups_error :: Flags            -- ^ Error handling
+                    -> Int              -- ^ Current iteration
+                    -> [Error]          -- ^ List of errors
+                    -> CoreM [CoreBind] -- ^ Bindings from errors.
 compileGroups_error flags d errors = do
    let (Flags verb to_crash) = flags
+       -- To crash handler
        crasher errs = case errs of
            []   -> return ()
            _    -> error "Crashing..."
+       -- Print header for this type of errors
        print_header txt = case verb of
            None  -> empty
-           other ->    text "Errors while compiling and substituting bindings at depth " <+> int d <> text":" 
-                    $$ nest 5 txt 
+           other ->    text "Errors while compiling and substituting bindings at depth " <+> int d <> text ":" 
+                    $$ nest 4 txt 
+       -- Print errors themselves
        printer errs = case errs of
            [] -> return ()
+           -- Print with header
            ls ->  putMsg $ print_header (vcat (map (pprError verb) errs)) 
+       -- Get the bindings from errors.
        ungroup err = case err of
-           (CompilationNotSupported bind) -> Just bind
+           (CompilationNotSupported bind)   -> Just bind
            (CompilationError        bind _) -> Just bind
-           otherwise                      -> Nothing
+           -- If we get Nothing, we will probably get missing symbols.
+           -- TODO: Handle such situation.
+           otherwise                        -> Nothing
+
+   -- Print errors
    printer errors
+   -- Crash if conditions are me
    when to_crash $ crasher errors
+   -- Return bindings
    return $ mapMaybe ungroup errors

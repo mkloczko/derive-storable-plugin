@@ -20,8 +20,6 @@ flatAlignment :: Flat Int Double -> Int
 flatAlignment = galignment
 
 
-{-# SPECIALIZE gpeekByteOff :: Ptr b -> Int -> IO (Flat Int Double) #-}
-
 flatPeekByteOff :: Ptr b -> Int -> IO (Flat Int Double)
 flatPeekByteOff ptr offset = gpeekByteOff ptr offset
 

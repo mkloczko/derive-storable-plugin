@@ -7,7 +7,7 @@ import Id  (isLocalId, isGlobalId,Id)
 import Var (Var(..))
 import Name (getOccName,mkOccName)
 import OccName (OccName(..), occNameString)
-import qualified Name as N (varName)
+import qualified Name as N (varName, tcClsName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
 -- import PrelNames (intDataConKey)
@@ -20,7 +20,7 @@ import CoreMonad (CoreM, SimplifierMode(..),CoreToDo(..), getHscEnv)
 import BasicTypes (CompilerPhase(..))
 -- Types 
 import Type (isAlgType, splitTyConApp_maybe)
-import TyCon (algTyConRhs, visibleDataCons)
+import TyCon (TyCon,tyConName, algTyConRhs, visibleDataCons)
 import TyCoRep (Type(..), TyBinder(..))
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
@@ -69,6 +69,7 @@ isPeekId ident = getOccName (varName ident) == mkOccName N.varName "$cgpeekByteO
 isPokeId :: Id -> Bool
 isPokeId ident = getOccName (varName ident) == mkOccName N.varName "$cgpokeByteOff" 
 
+
 --------------------------------------------
 --Specialized at instance definition site.--
 --------------------------------------------
@@ -108,10 +109,10 @@ isOffsetsId id = getOccName (varName id) == mkOccName N.varName "offsets"
 ---------------------------
 
 -- | Is a GStorable identifier
-isAnyGStorable :: Id -> Bool
-isAnyGStorable id = any ($id) [isSizeOfId, isAlignmentId, isPeekId
-                              , isPokeId, isGStorableInstId
-                              ]
+isGStorableId :: Id -> Bool
+isGStorableId id = any ($id) [isSizeOfId, isAlignmentId, isPeekId
+                           , isPokeId, isGStorableInstId
+                           ]
 -- | Is the id an GStorable method.
 isGStorableMethodId :: Id -> Bool 
 isGStorableMethodId id = any ($id) [isSizeOfId, isAlignmentId
@@ -134,3 +135,4 @@ withTypeCheck ty_f id_f id = do
     let ty_checked = ty_f $ varType id
         id_checked = id_f id
     and [isJust ty_checked, id_checked]
+
