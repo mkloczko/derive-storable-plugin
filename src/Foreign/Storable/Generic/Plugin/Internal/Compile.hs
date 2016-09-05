@@ -37,8 +37,9 @@ import GHCi.RemoteTypes
 
 -- Used to create types
 import TysWiredIn
+import PrelNames (buildIdKey, augmentIdKey)
 import DataCon (dataConWorkId)
-
+import BasicTypes (Boxity(..))
 
 import Unsafe.Coerce
 
@@ -127,11 +128,56 @@ offsetSubstitution b@(NonRec id expr) = do
 -- | The data which can be expressed.
 data OffsetScope = IntList Id CoreExpr
                  | IntPrimVal  Id CoreExpr
+                 | IntListTuple  Id CoreExpr
+                 | IntTupleVal  Id CoreExpr
+
+getScopeId   :: OffsetScope -> Id
+getScopeId (IntList      id _) = id
+getScopeId (IntPrimVal   id _) = id
+getScopeId (IntListTuple id _) = id
+getScopeId (IntTupleVal  id _) = id
+
+getScopeExpr :: OffsetScope -> CoreExpr
+getScopeExpr (IntList      _ expr) = expr 
+getScopeExpr (IntPrimVal   _ expr) = expr 
+getScopeExpr (IntListTuple _ expr) = expr 
+getScopeExpr (IntTupleVal  _ expr) = expr 
 
 instance Outputable OffsetScope where
     ppr (IntList    id expr) = ppr id <+> ppr expr
     ppr (IntPrimVal id expr) = ppr id <+> ppr expr
+    ppr (IntListTuple   id expr) = ppr id <+> ppr expr
+    ppr (IntTupleVal   id expr) = ppr id <+> ppr expr
     pprPrec _ el = ppr el
+
+
+intTupleValExpr :: (Int,Int) -> CoreExpr
+intTupleValExpr (x,y) = int_val
+    where tup_type   = TyConApp (tupleTyCon Boxed 2) [intTy, intTy]
+          tup_cons   = dataConWorkId $ tupleDataCon Boxed 2
+          int_con    = Var $ dataConWorkId intDataCon 
+          x_val      = App int_con (Lit $ MachInt $ fromIntegral x)
+          y_val      = App int_con (Lit $ MachInt $ fromIntegral y)
+          int_val'   = App (Var tup_cons) x_val 
+          int_val    = App int_val'       y_val
+
+intListTupleExpr :: [(Int,Int)] -> CoreExpr
+intListTupleExpr list = intListTupleExpr' (reverse list) empty_list
+    where empty_list = App ( Var $ dataConWorkId nilDataCon) (Type tup_type)
+          tup_type   = TyConApp (tupleTyCon Boxed 2) [intTy, intTy]
+
+intListTupleExpr' :: [(Int,Int)] -> CoreExpr -> CoreExpr
+intListTupleExpr'  []    acc = acc
+intListTupleExpr' ((x,y):ls) acc = intListTupleExpr' ls $ App int_cons acc
+    where int_t_cons = App (Var $ dataConWorkId consDataCon) (Type tup_type) 
+          tup_type   = TyConApp (tupleTyCon Boxed 2) [intTy, intTy]
+          tup_cons   = dataConWorkId $ tupleDataCon Boxed 2
+          int_con    = Var $ dataConWorkId intDataCon 
+          x_val      = App int_con (Lit $ MachInt $ fromIntegral x)
+          y_val      = App int_con (Lit $ MachInt $ fromIntegral y)
+          int_val'   = App (Var tup_cons) x_val 
+          int_val    = App int_val'       y_val
+          int_cons   = App int_t_cons     int_val
 
 -- | Create a list expression from Haskell list.
 intListExpr :: [Int] -> CoreExpr
@@ -201,9 +247,20 @@ inScopeList (el:rest) e@(Var l_id)
     = inScopeList rest e
 -- Empty list or not Var id.
 inScopeList _ _ = Nothing
+
+inScopeAll :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
+inScopeAll (el:rest) e@(Var v_id) 
+    | getScopeId el == v_id
+    = Just $ getScopeExpr el
+    | otherwise = inScopeAll rest e
+inScopeAll _  _ = Nothing
+
 -- | Whether the expression is in scope.
 inScope :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
-inScope scope expr = inScopeVal scope expr <|> inScopeList scope expr
+inScope scope expr = inScopeAll scope expr
+
+
+
 -- Implement:
 -- inScopeVal
 -- inScopeList
@@ -217,16 +274,28 @@ caseExprIndex :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
 caseExprIndex scope expr
     -- A long list of what needs to be inside the expression. 
     | App beg lit <- expr
+    -- Substitute or leave the literal be.
     , Just lit_expr <- inScopeVal scope lit <|> isLitOrGlobal lit
     , App beg2 offsets <- trace "Got lit_expr" $ beg
-    , Just list_expr <- trace (showSDocUnsafe $ ppr scope <+> exprInspect offsets) $ inScopeList scope offsets
+    -- Substitute or leave the offsets list free.
+    , Just list_expr <- trace (showSDocUnsafe $ ppr scope <+> exprInspect offsets) $ inScopeList scope offsets <|> Just offsets
     , App ix_var t_int <- trace "Got list expr!" beg2
+    -- Get to the !! var.
     , Var ix_id    <- ix_var
+    -- Chech whether types are ok.
     , Type intt <- t_int
     , isIntType intt
-    , isIndexer ix_id 
+    , isIndexer ix_id
+    -- New expression.
     = Just $ App (App (App ix_var t_int) list_expr) lit_expr 
     | otherwise = Nothing
+
+-- Check whether this is a build expression.
+isBuildExpr :: CoreExpr -> Bool
+isBuildExpr (Var id) = getUnique id == buildIdKey || getUnique id == augmentIdKey
+isBuildExpr (App l _) = isBuildExpr l
+-- Since we go left all the time, there should be no more expressions to parse.
+isBuildExpr _        = False
 
 -- | Inspect an expression. Temporary programming scaffolding.
 -- For learning purposes.
@@ -290,6 +359,7 @@ offsetSubstitutionTree scope expr
       case e_new_s of
           Left err       -> return $ Left err
           Right int_list -> putMsg (ppr int_list) >> offsetSubstitutionTree (int_list:scope) case_expr
+    -- Normal let bindings 
     | Let bind in_expr <- expr
     = do 
       putMsgS "Let binding.."
@@ -309,10 +379,59 @@ offsetSubstitutionTree scope expr
       case e_new_s of
           Left err       -> return $ Left err
           Right int_val  -> putMsg (ppr int_val) >> offsetSubstitutionTree (int_val:scope) alt_expr
-    -- 
+    -- Parse case expr of wild [] -> ...; : w1 w2 -> ...
+    -- expressions.
+    -- Compile case_expr and put it in scope as wild.
+    -- In addition analyse case_expr and choose whether
+    -- to use first alt ([] -> ...) or second one ( : w1 w2 -> ...) 
+    | Case case_expr wild t_int_l [alt0, alt1] <- expr
+    -- Chech the case type whether it is [Int]
+    -- , TyConApp list_tc [int_t] <- t_int_l
+    -- , list_tc == listTyCon
+    -- , int_t   `eqType` intTy 
+    -- Check the alternative [] -> ... .
+    , (DataAlt nil_con, [], alt_expr0) <- alt0
+    , nil_con  == nilDataCon
+    -- Check the alternative : w1 ws -> ... .
+    , (DataAlt cons_con, [w1,ws], alt_expr1) <- alt1
+    , cons_con == consDataCon
+    -- Check whether it is complieable.
+    , isBuildExpr case_expr
+    = do 
+      putMsgS "I build!"
+      -- Compile the case_expr
+      -- Perhaps substitutions might be needed ?
+      e_compiled_case_expr <- tryCompileExpr wild case_expr :: CoreM (Either Error [(Int,Int)])
+      -- 
+      let e_list_expr = intListTupleExpr <$> e_compiled_case_expr
+          e_scoped_list = IntListTuple wild <$> e_list_expr
+          new_scope = (:) <$> e_scoped_list <*> pure scope
+          
+          -- For doing substitutions
+          do_subs (Left err) expr = return $ Left err 
+          do_subs (Right sc) expr = offsetSubstitutionTree sc expr
+      
+          -- For choosing between the alternatives
+      let first_alternative :: CoreM (Either Error CoreExpr)
+          first_alternative = do
+              do_subs new_scope alt_expr0 
+          second_alternative :: (Int,Int) -> [(Int,Int)] -> CoreM (Either Error CoreExpr)
+          second_alternative w1_i ws_li = do
+              let w1_scoped  = IntTupleVal w1 (intTupleValExpr w1_i )
+                  ws_scoped  = IntList     ws (intListTupleExpr    ws_li)
+                  new_scope' = (:) w1_scoped <$> ((:) ws_scoped <$> new_scope)
+              do_subs new_scope' alt_expr1
+      -- Analyse the compiled list
+          with_compiled list = case list of
+              []           -> first_alternative
+              (w1_i:ws_li) -> second_alternative w1_i ws_li
+      case e_compiled_case_expr of
+          Right list -> with_compiled list
+          Left  err  -> return $ Left err
+    -- Normal case expressions. 
     | Case case_expr cb t alts <- expr
     = do
-        putMsg $ text "casey casey" <+> ppr case_expr
+        putMsg $ text "casey casey" <+> ppr case_expr <+> ppr t <+> ppr scope
         e_new_alts <- mapM (\(a, args, a_expr) -> (,,) a args <$> offsetSubstitutionTree scope a_expr) alts
         new_case_expr <- offsetSubstitutionTree scope case_expr
         let err = find (\(_,_,e) -> isLeft e) e_new_alts
