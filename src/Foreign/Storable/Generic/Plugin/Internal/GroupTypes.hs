@@ -34,7 +34,8 @@ import CoreMonad (putMsg, putMsgS)
 -- Used to get to compiled values
 import GHCi.RemoteTypes
 
-
+import TyCon
+import Type
 
 import Unsafe.Coerce
 
@@ -89,50 +90,54 @@ calcGroupOrder_iteration (t:ts) checked accepted rejected = do
         then calcGroupOrder_iteration ts (t:checked)  accepted    (t:rejected)
         else calcGroupOrder_iteration ts (t:checked) (t:accepted)  rejected
 
--- type TypeScope = (TyVar, Type)
--- 
--- -- | Get data constructor arguments from an algebraic type.
--- -- getDataConArgs' :: Type -> [Type]
--- getDataConArgs' t 
---     | isAlgType t
---     -- TODO: Inspect the arguments of type constructor
---     -- Perhaps one could put them inside the 
---     , Just (tc, ty_args) <- splitTyConApp_maybe t
---     , ty_vars <- tyConTyVars tc
---     = do
---     let type_scope = zip ty_vars ty_args
---         data_cons  = concatMap dataConOrigArgTys $ (visibleDataCons.algTyConRhs) tc
---         
---     -- = tyConTyVars tc
---     -- TODO: Handle type synonyms and type family instances
---     | otherwise = []
+{- Note [Type substitution]
+ -
+ - TODO
+ -}
+
+type TypeScope = (TyVar, Type)
+
+substituteTyCon :: [TypeScope] -> Type -> Type
+substituteTyCon []         tc_app             = tc_app
+substituteTyCon type_scope old@(TyVarTy  ty_var) 
+-- | Substitute simple type variables
+    = case find (\(av,_) -> av == ty_var) type_scope of
+          Just (_, new_type) -> new_type
+          Nothing            -> old
+substituteTyCon type_scope (TyConApp tc args)
+-- | Substitute type constructors
+    = TyConApp tc $ map (substituteTyCon type_scope) args
+substituteTyCon type_scope t = t 
 
 -- | Get data constructor arguments from an algebraic type.
 getDataConArgs :: Type -> [Type]
 getDataConArgs t 
     | isAlgType t
-    -- TODO: Inspect the arguments of type constructor
-    -- Perhaps one could put them inside the 
-    , Just (tc, _) <- splitTyConApp_maybe t
-    = concatMap dataConOrigArgTys $ (visibleDataCons.algTyConRhs) tc
-    -- TODO: Handle type synonyms and type family instances
+    , Just (tc, ty_args) <- splitTyConApp_maybe t
+    , ty_vars <- tyConTyVars tc
+    = do
+    -- Substitute data_cons args with type args,
+    -- using ty_vars as keys.
+    -- See note [Type substitution].
+    let type_scope = zip ty_vars ty_args
+        data_cons  = concatMap dataConOrigArgTys $ (visibleDataCons.algTyConRhs) tc
+    map (substituteTyCon type_scope) data_cons  
     | otherwise = []
 
 
--- groupBinds :: [[Type]] -> [CoreBind] -> Either Error [[CoreBind]]
--- compileGroups :: Flags -> [[CoreBind]] -> IO [CoreBind]
--- grouping_errors :: Flags -> [Error] -> CoreM [CoreBind]
 
+-- | Group bindings according to type groups.
 groupBinds :: [[Type]]   -- ^ Type groups.
            -> [CoreBind] -- ^ Should be only NonRecs. 
            -> ([[CoreBind]], Maybe Error)
 -- perhaps add some safety so non-recs won't get here.
-groupBinds type_groups binds = groupBinds_rec type_groups binds []
-        
-groupBinds_rec :: [[Type]] 
-               -> [CoreBind]
-               -> [[CoreBind]]
-               -> ([[CoreBind]], Maybe Error)
+groupBinds type_groups binds = groupBinds_rec type_groups binds [] 
+
+-- | Iteration for groupBinds
+groupBinds_rec :: [[Type]]      -- ^ Group of types
+               -> [CoreBind]    -- ^ Ungrouped bindings
+               -> [[CoreBind]]  -- ^ Grouped bindings
+               -> ([[CoreBind]], Maybe Error) -- ^ Grouped bindings, and perhaps an error)
 groupBinds_rec []       []    acc = (reverse acc,Nothing)
 groupBinds_rec (a:as)   []    acc = (reverse acc,Just $ OtherError msg)
     where msg =    text "Could not find any bindings." 
