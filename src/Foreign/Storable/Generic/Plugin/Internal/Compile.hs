@@ -350,19 +350,19 @@ compileGStorableBind :: CoreBind -> CoreM (Either Error CoreBind)
 compileGStorableBind core_bind
     -- Substitute gsizeOf
     | (NonRec id expr) <- core_bind
-    , isSizeOfId id 
+    , isSizeOfId id || isSpecSizeOfId id 
     = intSubstitution core_bind
     -- Substitute galignment
     | (NonRec id expr) <- core_bind
-    , isAlignmentId id  
+    , isAlignmentId id || isSpecAlignmentId id 
     = intSubstitution core_bind
     -- Substitute offsets in peeks.
     | (NonRec id expr) <- core_bind
-    , isPeekId id
+    , isPeekId id      || isSpecPeekId id
     = offsetSubstitution core_bind
     -- Substitute offsets in pokes.
     | (NonRec id expr) <- core_bind
-    , isPokeId id
+    , isPokeId id      || isSpecPokeId id
     = offsetSubstitution core_bind
     -- Everything else - nope.
     | otherwise = return $ Left $ CompilationNotSupported core_bind
@@ -374,7 +374,7 @@ lintBind :: CoreBind -- ^ Core binding to use when returning CompilationError
 lintBind b_old b@(NonRec id expr) = do
     dyn_flags <- getDynFlags
     case lintExpr dyn_flags [] expr of
-        Just sdoc -> (putMsg $ text "Lint failed" <+> ppr id ) >> (return $ Left $ CompilationError b_old sdoc)
+        Just sdoc -> (return $ Left $ CompilationError b_old sdoc)
         Nothing   -> return $ Right b
 lintBind b_old b@(Rec bs) = do
     dyn_flags <- getDynFlags

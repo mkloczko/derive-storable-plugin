@@ -41,9 +41,12 @@ import Foreign.Storable.Generic.Plugin.Internal.Helpers
 
 -- | Predicate used to find GStorable instances identifiers.
 isGStorableInstId :: Id -> Bool
-isGStorableInstId id = cutted_occ_name == gstorable_dict_name
+isGStorableInstId id =    cutted_occ_name == gstorable_dict_name 
+                       && cutted_occ_name2 /= gstorable'_dict_name
     where cutted_occ_name = cutOccName 11 $ getOccName (varName id)
+          cutted_occ_name2 = cutOccName 12 $ getOccName (varName id)
           gstorable_dict_name = mkOccName N.varName "$fGStorable"
+          gstorable'_dict_name = mkOccName N.varName "$fGStorable'"
 
 -- | Predicate used to find gsizeOf identifiers
 isSizeOfId :: Id -> Bool
@@ -66,27 +69,30 @@ isPokeId ident = getOccName (varName ident) == mkOccName N.varName "$cgpokeByteO
 --Specialized at instance definition site.--
 --------------------------------------------
 
--- -- | Predicate used to find gsizeOf identifiers
--- isSpecGStorableDictId :: Id -> Bool
--- isSpecGStorableDictId id = cutted_occ_name == gstorable_dict_name
---     where cutted_occ_name = cutOccName 13 $ getOccName (varName id)
---           gstorable_dict_name = mkOccName N.varName "$s$fGStorable"
--- 
--- -- | Predicate used to find gsizeOf identifiers
--- isSpecSizeOfId :: Id -> Bool
--- isSpecSizeOfId ident = getOccName (varName ident)    == mkOccName N.varName "$s$cgsizeOf" 
--- 
--- -- | Predicate used to find galignment identifiers
--- isSpecAlignmentId :: Id -> Bool
--- isSpecAlignmentId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgalignment" 
--- 
--- -- | Predicate used to find gpeekByteOff identifiers
--- isSpecPeekId :: Id -> Bool
--- isSpecPeekId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgpeekByteOff" 
--- 
--- -- | Predicate used to find gpeekByteOff identifiers
--- isSpecPeekId :: Id -> Bool
--- isSpecPeekId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgpeekByteOff" 
+-- | Predicate used to find specialized GStorable instance identifiers
+isSpecGStorableInstId :: Id -> Bool
+isSpecGStorableInstId id = cutted_occ_name == gstorable_dict_name
+                       && cutted_occ_name2 /= gstorable'_dict_name
+    where cutted_occ_name = cutOccName 11 $ getOccName (varName id)
+          cutted_occ_name2 = cutOccName 12 $ getOccName (varName id)
+          gstorable_dict_name = mkOccName N.varName "$s$fGStorable"
+          gstorable'_dict_name = mkOccName N.varName "$s$fGStorable'"
+
+-- | Predicate used to find specialized gsizeOf identifiers
+isSpecSizeOfId :: Id -> Bool
+isSpecSizeOfId ident = getOccName (varName ident)    == mkOccName N.varName "$s$cgsizeOf" 
+
+-- | Predicate used to find specialized galignment identifiers
+isSpecAlignmentId :: Id -> Bool
+isSpecAlignmentId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgalignment" 
+
+-- | Predicate used to find specialized gpeekByteOff identifiers
+isSpecPeekId :: Id -> Bool
+isSpecPeekId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgpeekByteOff" 
+
+-- | Predicate used to find specialized gpokeByteOff identifiers
+isSpecPokeId :: Id -> Bool
+isSpecPokeId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgpokeByteOff" 
 
 
 ----------------------------
@@ -102,13 +108,18 @@ isOffsetsId id = getOccName (varName id) == mkOccName N.varName "offsets"
 
 -- | Is a GStorable identifier
 isGStorableId :: Id -> Bool
-isGStorableId id = any ($id) [isSizeOfId, isAlignmentId, isPeekId
-                           , isPokeId, isGStorableInstId
-                           ]
+isGStorableId id = any ($id) [ isSizeOfId, isAlignmentId, isPeekId
+                             , isPokeId, isGStorableInstId
+                             , isSpecSizeOfId, isSpecAlignmentId
+                             , isSpecPeekId, isSpecPokeId
+                             , isSpecGStorableInstId
+                             ]
 -- | Is the id an GStorable method.
 isGStorableMethodId :: Id -> Bool 
 isGStorableMethodId id = any ($id) [isSizeOfId, isAlignmentId
                                    , isPeekId, isPokeId
+                                   , isSpecSizeOfId, isSpecAlignmentId
+                                   , isSpecPeekId, isSpecPokeId
                                    ]
 ------------------                                   
 -- Miscellanous --

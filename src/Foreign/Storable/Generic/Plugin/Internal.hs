@@ -30,7 +30,7 @@ import DataCon    (dataConWorkId,dataConOrigArgTys)
 import MkCore (mkWildValBinder)
 -- Printing
 import Outputable (cat, ppr, SDoc, showSDocUnsafe, showSDoc)
-import Outputable (($$), ($+$), hsep, vcat, empty,text, (<>), (<+>), nest, int, colon,hcat, comma, punctuate) 
+import Outputable (($$), ($+$), hsep, vcat, empty,text, (<>), (<+>), nest, int, colon,hcat, comma, punctuate, fsep) 
 import CoreMonad (putMsg, putMsgS, CoreM)
 
 import TyCon
@@ -93,7 +93,7 @@ groupTypes_info flags types = do
             other ->    text "GStorable instances will be optimised in the following order"
                     $+$ nest 4 txt
                     $+$ text ""
-        print_layer layer ix = int ix <> text ":" <+> hsep (punctuate comma $ map ppr layer)
+        print_layer layer ix = int ix <> text ":" <+> fsep (punctuate comma $ map ppr layer)
         -- Print groups of types
         printer groups = case groups of
             [] -> return ()
@@ -106,7 +106,8 @@ groupTypes flags type_order_ref guts = do
     let binds = mg_binds guts
         -- Get GStorable ids that are fully defined.
         all_ids = concatMap getIdsBind binds
-        predicate id = and [ isGStorableId id
+        with_typecheck = withTypeCheck getGStorableType isGStorableId 
+        predicate id = and [ with_typecheck id
                            , not (hasGStorableConstraints $ varType id)
                            ]
         gstorable_ids = filter predicate all_ids
@@ -222,8 +223,7 @@ foundBinds_info flags ids = do
             [] -> empty
             (h:_) -> case getGStorableType $ varType h of
                 Just gtype ->     ppr  gtype
-                              $+$ (hsep $ punctuate comma (map print_binding the_group))
-                              $+$ text ""
+                              $+$ (fsep $ punctuate comma (map print_binding the_group))
                 Nothing    -> ppr "Could not get the type of a binding:" 
                               $+$ nest 4 (ppr h <+> text "::" <+> ppr (varType h))
     -- Print the ids

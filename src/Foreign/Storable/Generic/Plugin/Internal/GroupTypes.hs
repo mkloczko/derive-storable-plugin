@@ -117,6 +117,7 @@ getDataConArgs t
     let type_scope = zip ty_vars ty_args
         data_cons  = concatMap dataConOrigArgTys $ (visibleDataCons.algTyConRhs) tc
     map (substituteTyCon type_scope) data_cons  
+    -- TODO: Handle newtypes.
     | otherwise = []
 
 
