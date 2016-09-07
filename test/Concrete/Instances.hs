@@ -6,5 +6,5 @@ import Types
 import Foreign.Storable.Generic
 
 instance GStorable Flat
--- instance GStorable Nested
--- instance GStorable Nested2
+instance GStorable Nested
+instance GStorable Nested2

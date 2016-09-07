@@ -10,9 +10,6 @@ import OccName (OccName(..), occNameString)
 import qualified Name as N (varName,tcClsName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- import PrelNames (intDataConKey)
--- import FastString (mkFastString)
--- import TysPrim (intPrimTy)
 -- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
@@ -192,49 +189,6 @@ getPeekType' t after_ptr after_int
     | otherwise = Nothing
 
 
-
--- -- | Get the type from GStorable peek method
--- getPeekPrimType :: Type -> Maybe Type
--- getPeekPrimType t = getPeekPrimType' t False False False
--- 
--- -- | Insides of getPeekType, which takes into the account
--- -- the order of arguments.
--- getPeekPrimType' :: Type 
---              -> Bool -- ^ Is after Ptr
---              -> Bool -- ^ Is after Int
---              -> Bool -- ^ Is after State# 
---              -> Maybe Type -- ^ Returning
--- getPeekPrimType' t after_ptr after_int after_state
---     -- Last step: (# State# RealWorld, Type #)
---     | after_ptr, after_int, after_state
---     -- , TyConApp unbx_tpl [state, the_t] <- t
---     -- , isUnboxedTupleTyCon unbx_tpl
---     -- , isStatePrimType state
---     = trace ("got the type: " ++ showSDocUnsafe (ppr t)) $ Nothing -- $ Just the_t
---     -- State# -> (# State# RealWorld, Type #)
---     | after_ptr, after_int
---     , ForAllTy st_bind last <- t
---     , Anon st_t <- st_bind
---     , isStatePrimType st_t
---     = trace "Got the state#" $ getPeekPrimType' last True True True
---     -- Int -> State# RealWorld -> (# State# RealWorld, Type #)
---     | after_ptr
---     , ForAllTy int_bind rest <- t
---     , Anon int_t <- int_bind
---     , isIntType int_t
---     = trace "got the smth:" $ getPeekPrimType' rest True True False
---     -- Ptr b -> Int -> State# RealWorld -> (# State# RealWorld , Type #)
---     | ForAllTy ptr_bind int_t <- t
---     , Anon ptr_t <- ptr_bind
---     , isPtrType ptr_t
---     = getPeekPrimType' int_t True False False
---     -- Ignore other types
---     -- including constraints and 
---     -- Named ty binders.
---     | ForAllTy _ some_t <- t
---     = getPeekPrimType' some_t after_ptr after_int after_state
---     | otherwise = Nothing
-
 -- | Get the type from GStorable poke method
 getPokeType :: Type -> Maybe Type
 getPokeType t = getPokeType' t False False
@@ -286,5 +240,3 @@ getGStorableType t = getGStorableInstType t <|> getSizeType t <|> getAlignmentTy
 -- Combination of methods.
 getGStorableMethodType :: Type -> Maybe Type
 getGStorableMethodType t = getSizeType t <|> getAlignmentType t <|> getPokeType t <|> getPeekType t
--- getOptimizableType :: Type -> Maybe Type
--- getOptimizableType t = getSizeType t <|> getAlignmentType t <|> getPeekPrimType t

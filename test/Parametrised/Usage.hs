@@ -21,7 +21,7 @@ flatAlignment = galignment
 
 
 flatPeekByteOff :: Ptr b -> Int -> IO (Flat Int Double)
-flatPeekByteOff ptr offset = gpeekByteOff ptr offset
+flatPeekByteOff = gpeekByteOff
 
 
 

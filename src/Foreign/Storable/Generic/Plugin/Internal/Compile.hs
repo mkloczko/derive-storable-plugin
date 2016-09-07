@@ -16,7 +16,7 @@ import Unique (getUnique)
 -- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
-import CoreMonad (CoreM, SimplifierMode(..),CoreToDo(..), getHscEnv)
+import CoreMonad (CoreM, SimplifierMode(..),CoreToDo(..), getHscEnv, getDynFlags)
 import CoreLint (lintExpr)
 import BasicTypes (CompilerPhase(..))
 -- Haskell types 
@@ -29,7 +29,7 @@ import DataCon    (dataConWorkId,dataConOrigArgTys)
 import MkCore (mkWildValBinder)
 -- Printing
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
-import Outputable (Outputable(..),($$), ($+$), vcat, empty,text, (<>), (<+>), nest, int) 
+import Outputable (Outputable(..),($$), ($+$), vcat, empty,text, (<>), (<+>), nest, int, comma) 
 import CoreMonad (putMsg, putMsgS)
 
 -- Used to get to compiled values
@@ -58,7 +58,11 @@ import Foreign.Storable.Generic.Plugin.Internal.Error
 import Foreign.Storable.Generic.Plugin.Internal.Predicates
 import Foreign.Storable.Generic.Plugin.Internal.Types
 
--- | Compile and expression.
+---------------------
+-- compile helpers --
+---------------------
+
+-- | Compile an expression.
 compileExpr :: HscEnv -> CoreExpr -> SrcSpan -> IO a 
 compileExpr hsc_env expr src_span = do
     foreign_hval <- liftIO $ hscCompileCoreExpr hsc_env src_span expr
@@ -113,12 +117,6 @@ intSubstitution b@(NonRec id (Lam _ expr)) = do
 offsetSubstitution :: CoreBind -> CoreM (Either Error CoreBind)
 offsetSubstitution b@(Rec _) = return $ Left $ CompilationNotSupported b
 offsetSubstitution b@(NonRec id expr) = do
-    let print_expr e = putMsg $ ppr e 
-        is_case4     = case getPokeType (varType id) of
-            Just (TyConApp tc _)  -> trace (showSDocUnsafe $ ppr tc) $ getOccName (tyConName tc) == mkOccName N.tcClsName "C4"
-            _ -> False
-
-    when is_case4 $ putMsgS "Before" >> print_expr expr
     
     e_subs <- offsetSubstitutionTree [] expr
     let ne_subs = case e_subs of
@@ -129,65 +127,26 @@ offsetSubstitution b@(NonRec id expr) = do
              Left err@(CompilationError _ _) 
                  -> Left $ CompilationError b (pprError Some err)
              a   -> a
-    case e_subs of
-       Right e -> when is_case4 $ putMsgS "After" >> print_expr e
-       _       -> return ()
     return $ NonRec id <$> e_subs
 
 
 -- | The data which can be expressed.
 data OffsetScope = IntList Id CoreExpr
                  | IntPrimVal  Id CoreExpr
-                 | IntListTuple  Id CoreExpr
-                 | IntTupleVal  Id CoreExpr
 
 getScopeId   :: OffsetScope -> Id
 getScopeId (IntList      id _) = id
 getScopeId (IntPrimVal   id _) = id
-getScopeId (IntListTuple id _) = id
-getScopeId (IntTupleVal  id _) = id
 
 getScopeExpr :: OffsetScope -> CoreExpr
 getScopeExpr (IntList      _ expr) = expr 
 getScopeExpr (IntPrimVal   _ expr) = expr 
-getScopeExpr (IntListTuple _ expr) = expr 
-getScopeExpr (IntTupleVal  _ expr) = expr 
 
 instance Outputable OffsetScope where
-    ppr (IntList    id expr) = ppr id <+> ppr expr
-    ppr (IntPrimVal id expr) = ppr id <+> ppr expr
-    ppr (IntListTuple   id expr) = ppr id <+> ppr expr
-    ppr (IntTupleVal   id expr) = ppr id <+> ppr expr
+    ppr (IntList    id expr) = ppr id <+> ppr (getUnique id) <+> comma <+> ppr expr
+    ppr (IntPrimVal id expr) = ppr id <+> ppr (getUnique id) <+> comma <+> ppr expr
     pprPrec _ el = ppr el
 
-
-intTupleValExpr :: (Int,Int) -> CoreExpr
-intTupleValExpr (x,y) = int_val
-    where tup_type   = TyConApp (tupleTyCon Boxed 2) [intTy, intTy]
-          tup_cons   = dataConWorkId $ tupleDataCon Boxed 2
-          int_con    = Var $ dataConWorkId intDataCon 
-          x_val      = App int_con (Lit $ MachInt $ fromIntegral x)
-          y_val      = App int_con (Lit $ MachInt $ fromIntegral y)
-          int_val'   = App (Var tup_cons) x_val 
-          int_val    = App int_val'       y_val
-
-intListTupleExpr :: [(Int,Int)] -> CoreExpr
-intListTupleExpr list = intListTupleExpr' (reverse list) empty_list
-    where empty_list = App ( Var $ dataConWorkId nilDataCon) (Type tup_type)
-          tup_type   = TyConApp (tupleTyCon Boxed 2) [intTy, intTy]
-
-intListTupleExpr' :: [(Int,Int)] -> CoreExpr -> CoreExpr
-intListTupleExpr'  []    acc = acc
-intListTupleExpr' ((x,y):ls) acc = intListTupleExpr' ls $ App int_cons acc
-    where int_t_cons = App (Var $ dataConWorkId consDataCon) (Type tup_type) 
-          tup_type   = TyConApp (tupleTyCon Boxed 2) [intTy, intTy]
-          tup_cons   = dataConWorkId $ tupleDataCon Boxed 2
-          int_con    = Var $ dataConWorkId intDataCon 
-          x_val      = App int_con (Lit $ MachInt $ fromIntegral x)
-          y_val      = App int_con (Lit $ MachInt $ fromIntegral y)
-          int_val'   = App (Var tup_cons) x_val 
-          int_val    = App int_val'       y_val
-          int_cons   = App int_t_cons     int_val
 
 -- | Create a list expression from Haskell list.
 intListExpr :: [Int] -> CoreExpr
@@ -229,53 +188,23 @@ isLitOrGlobal e@(Var id)
     = Just e
 isLitOrGlobal _ = Nothing
 
--- | Check whether the expression is compileable.
--- If not, substitute with one in scope.
-inScopeVal :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
--- PrimVal in scope. Check whether this is it.
-inScopeVal ((IntPrimVal id n_e):rest) e@(Var v_id)
-    | id == v_id
-    = Just n_e 
-    | otherwise = inScopeVal rest e
--- Something else in scope. Jump to next.
-inScopeVal (el:rest)                e@(Var v_id) 
-    = inScopeVal rest e
--- Empty list or not Var id.
-inScopeVal _ _  = Nothing
-
--- | Check whether the int list is in scope.
-inScopeList :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
--- TODO: Check whether the expression is a resolveable list.
--- (That is literals and globals, and perhaps values from scope)
--- IntList in scope. Check whether this is it.
-inScopeList ((IntList id n_e):rest) e@(Var l_id) 
-    | id == l_id
-    = Just n_e
-    | otherwise = inScopeList rest e
--- Something else in scope. Jump to next.
-inScopeList (el:rest) e@(Var l_id) 
-    = inScopeList rest e
--- Empty list or not Var id.
-inScopeList _ _ = Nothing
-
+-- | Check whether the given CoreExpr is an id, 
+-- and if yes - substitute it.
 inScopeAll :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
 inScopeAll (el:rest) e@(Var v_id) 
-    | getScopeId el == v_id
+    | id <- getScopeId el
+    -- Thought uniques will be unique inside.
+    , id == v_id
+    -- Check whether the types have the same name and id.
+    , getOccName (varName id) == getOccName (varName v_id)
     = Just $ getScopeExpr el
     | otherwise = inScopeAll rest e
 inScopeAll _  _ = Nothing
 
--- | Whether the expression is in scope.
-inScope :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
-inScope scope expr = inScopeAll scope expr
 
-
-
--- Implement:
--- inScopeVal
--- inScopeList
-
-isIndexer :: Id -> Bool 
+-- | Is an "$w!!" identifier
+isIndexer :: Id   
+          -> Bool
 isIndexer id = getOccName (varName id) == mkOccName N.varName "$w!!"
 
 -- | Try to create a compileable version of case expr body.
@@ -284,15 +213,15 @@ caseExprIndex :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
 caseExprIndex scope expr
     -- A long list of what needs to be inside the expression. 
     | App beg lit <- expr
-    -- Substitute or leave the literal be.
-    , Just lit_expr <- inScopeVal scope lit <|> isLitOrGlobal lit
+    -- Substitute or leave the literal be. Otherwise cancel.
+    , Just lit_expr <- inScopeAll scope lit <|> isLitOrGlobal lit
     , App beg2 offsets <- beg
     -- Substitute or leave the offsets list free.
-    , Just list_expr <- inScopeList scope offsets <|> Just offsets
+    , Just list_expr <- inScopeAll scope offsets <|> Just offsets
     , App ix_var t_int <- beg2
     -- Get to the !! var.
     , Var ix_id    <- ix_var
-    -- Chech whether types are ok.
+    -- Check whether types are ok.
     , Type intt <- t_int
     , isIntType intt
     , isIndexer ix_id
@@ -300,47 +229,43 @@ caseExprIndex scope expr
     = Just $ App (App (App ix_var t_int) list_expr) lit_expr 
     | otherwise = Nothing
 
--- Check whether this is a build expression.
-isBuildExpr :: CoreExpr -> Bool
-isBuildExpr (Var id) = getUnique id == buildIdKey || getUnique id == augmentIdKey
-isBuildExpr (App l _) = isBuildExpr l
--- Since we go left all the time, there should be no more expressions to parse.
-isBuildExpr _        = False
 
--- | Inspect an expression. Temporary programming scaffolding.
--- For learning purposes.
-exprInspect :: CoreExpr -> SDoc
-exprInspect (Var id)      =    text "Is id!" <+> ppr id
-exprInspect (Lit l)       =    text "is literal" <+> ppr l
-exprInspect (App beg lit) =    text "Application:" 
-                            $$ nest 4 (text "left"  <+> (exprInspect beg)) 
-                            $$ nest 4 (text "right" <+> (exprInspect lit)) 
-exprInspect (Lam id expr) =    text "Lambda:" <+> ppr id 
-                            $$ nest 2 (exprInspect expr)
-exprInspect (Let b     i) =    text "Let " <+> text "..mumble.."
-                            $$ exprInspect i
-exprInspect (Case expr cb t alts) 
-                          =    text "Case " <+> exprInspect expr <+> text "of"
-exprInspect  _            = empty
+{- Note [Offset substitution]
+ - ~~~~~~~~~~~~~~~~~~~~~~~~~~
+ -
+ - We would like for gpeekByteOff and gpokeByteOff methods to work as fast as 
+ - handwritten versions. This depends on whether the field's offsets are known
+ - at compile time or not. 
+ -
+ - To have offsets at compile time we have look for certain expressions to pop up.
+ - We need to compile them, and later translate them back to Core expressions.
+ - This approach relies on compiler optimisations of GStorable internals,
+ - like inlining gpeekByteOff' methods and not inlining the calcOffsets functions. 
+ - If these optimisations do not happen, a compilation error might occur.
+ - If not, the resulting method might be not as fast as handwritten one. 
+ -
+ -
+ - We expect to deal with the following expressions:
+ -
+ - 
+ - 1) let offsets = ... :: [Int] in expr
+ -
+ - Here we compile the offsets and put them for later use in expr.
+ -
+ -
+ - 2) case $w!! @Int offsets 0# of _ I# x -> alt_expr
+ - or case $w!! @Int ...     0# of _ I# x -> alt_expr   
+ - 
+ - Here we substitute the offsets if we can, and then we compile the 
+ - evaluated expression to later replace 'x' occurences in alt_expr.
+ -
+ -
+ -}
 
 -- | Substitute the offsets in a tree.
 -- All top-level local ids should be alread in place.
--- Now try to compile selected expressions (see note [Selected expressions])
+-- Now try to compile selected expressions (See note [Offset substitution])
 offsetSubstitutionTree :: [OffsetScope] -> CoreExpr -> CoreM (Either Error CoreExpr)
--- Variable. Return it, or try to replace it ? Try to replace... 
-offsetSubstitutionTree scope e@(Var  _  )    = do
-    let m_subs = inScope scope e
-    -- Assuming that the first Just will be chosen.
-        new_e = m_subs <|> Just e
-    -- case m_subs of
-    --     Nothing -> return ()
-    --     Just expr -> do 
-    --         putMsg $ text "Found sub!" <+> ppr expr
-    --         putMsg $ text "scope" <+> ppr scope
-    case new_e of
-        Just e -> return $ Right e
-        Nothing -> return $ Left $ OtherError  (text  "This shouldn't happen."
-                                    $$ text "`m_subs <|> Just e` cannot be `Nothing`.")
 -- Literal. Return it.
 offsetSubstitutionTree scope e@(Lit  _  )    = return $ Right e
 -- Do substitutions for both left and right side of an application.
@@ -348,104 +273,52 @@ offsetSubstitutionTree scope e@(App  e1  e2) = do
     subs1 <- offsetSubstitutionTree scope e1
     subs2 <- offsetSubstitutionTree scope e2
     return $ App <$> subs1 <*> subs2
+-- Do substitution for the expressions in Cast
 offsetSubstitutionTree scope e@(Cast expr c) = do
     subs <- offsetSubstitutionTree scope expr
     return $ Cast <$> subs <*> pure c
+-- Do substitution for the expressions in Tick
 offsetSubstitutionTree scope e@(Tick t expr) = do
     subs <- offsetSubstitutionTree scope expr
     return $ Tick t <$> subs
+-- Leave types alone.
 offsetSubstitutionTree scope e@(Type _  )    = return $ Right e
+-- Do substitutions for the lambda body.
 offsetSubstitutionTree scope e@(Lam  b expr) = do
     subs <- offsetSubstitutionTree scope expr
-    return $ Lam b <$> subs 
+    return $ Lam b <$> subs
+-- Other substitutions: For Case, Let, and Var.
 offsetSubstitutionTree scope expr
     -- Parse let offsets = ... in ... expressions.
     -- Compile offsets and put it in scope for further substitution.
-    | Let offset_bind case_expr <- expr
-    , NonRec offset_id offset_expr <- offset_bind
+    | Let    offset_bind in_expr     <- expr
+    , NonRec offset_id   offset_expr <- offset_bind
     , isOffsetsId offset_id
     = do 
       e_new_s <- exprToIntList offset_id offset_expr
-      -- putMsgS "Got offsets!"
       case e_new_s of
           Left err       -> return $ Left err
-          Right int_list -> offsetSubstitutionTree (int_list:scope) case_expr
+          Right int_list -> offsetSubstitutionTree (int_list:scope) in_expr
     -- Normal let bindings 
     | Let bind in_expr <- expr
     = do 
-      -- putMsgS "Let binding.."
       subs <- offsetSubstitutionTree scope in_expr
       return $ Let bind <$> subs
     -- Parse case expr of _ I# x# -> ... expressions.
     -- Compile case_expr and put it in scope as x#
-    -- case_expr is of format !! @Int offsets 0X
+    -- case_expr is of format $w!! @Int offsets 0#
     | Case case_expr _ _ [alt0] <- expr
     , (DataAlt i_prim_con, [x_id], alt_expr) <- alt0
     , i_prim_con == intDataCon
-    -- this expression _should_ be compileable.
     , Just new_case_expr <- caseExprIndex scope case_expr
     = do 
-      -- putMsgS "Whee"
       e_new_s <- exprToIntVal x_id new_case_expr 
       case e_new_s of
           Left err       -> return $ Left err
-          Right int_val  ->  offsetSubstitutionTree (int_val:scope) alt_expr
-    
-    -- TO DELETE
-    
-    -- Parse case expr of wild [] -> ...; : w1 w2 -> ...
-    -- expressions.
-    -- Compile case_expr and put it in scope as wild.
-    -- In addition analyse case_expr and choose whether
-    -- to use first alt ([] -> ...) or second one ( : w1 w2 -> ...) 
-    | Case case_expr wild t_int_l [alt0, alt1] <- expr
-    -- Chech the case type whether it is [Int]
-    -- , TyConApp list_tc [int_t] <- t_int_l
-    -- , list_tc == listTyCon
-    -- , int_t   `eqType` intTy 
-    -- Check the alternative [] -> ... .
-    , (DataAlt nil_con, [], alt_expr0) <- alt0
-    , nil_con  == nilDataCon
-    -- Check the alternative : w1 ws -> ... .
-    , (DataAlt cons_con, [w1,ws], alt_expr1) <- alt1
-    , cons_con == consDataCon
-    -- Check whether it is complieable.
-    , isBuildExpr case_expr
-    = do 
-      -- putMsgS "I build!"
-      -- Compile the case_expr
-      -- Perhaps substitutions might be needed ?
-      e_compiled_case_expr <- tryCompileExpr wild case_expr :: CoreM (Either Error [(Int,Int)])
-      -- 
-      let e_list_expr = intListTupleExpr <$> e_compiled_case_expr
-          e_scoped_list = IntListTuple wild <$> e_list_expr
-          new_scope = (:) <$> e_scoped_list <*> pure scope
-          
-          -- For doing substitutions
-          do_subs (Left err) expr = return $ Left err 
-          do_subs (Right sc) expr = offsetSubstitutionTree sc expr
-      
-          -- For choosing between the alternatives
-      let first_alternative :: CoreM (Either Error CoreExpr)
-          first_alternative = do
-              do_subs new_scope alt_expr0 
-          second_alternative :: (Int,Int) -> [(Int,Int)] -> CoreM (Either Error CoreExpr)
-          second_alternative w1_i ws_li = do
-              let w1_scoped  = IntTupleVal w1 (intTupleValExpr w1_i )
-                  ws_scoped  = IntList     ws (intListTupleExpr    ws_li)
-                  new_scope' = (:) w1_scoped <$> ((:) ws_scoped <$> new_scope)
-              do_subs new_scope' alt_expr1
-      -- Analyse the compiled list
-          with_compiled list = case list of
-              []           -> first_alternative
-              (w1_i:ws_li) -> second_alternative w1_i ws_li
-      case e_compiled_case_expr of
-          Right list -> with_compiled list
-          Left  err  -> return $ Left err
+          Right int_val  ->  offsetSubstitutionTree (int_val:scope) alt_expr 
     -- Normal case expressions. 
     | Case case_expr cb t alts <- expr
     = do
-        -- putMsg $ text "casey casey" <+> ppr case_expr <+> ppr t <+> ppr scope
         e_new_alts <- mapM (\(a, args, a_expr) -> (,,) a args <$> offsetSubstitutionTree scope a_expr) alts
         new_case_expr <- offsetSubstitutionTree scope case_expr
         -- Find the first error in alternative compilation
@@ -454,12 +327,22 @@ offsetSubstitutionTree scope expr
             Nothing -> return $ Case <$> new_case_expr 
                 <*> pure cb <*> pure t <*> pure [(a,b,ne) | (a,b,Right ne)  <- e_new_alts]
             Just (_,_,err) -> return err
+    -- Variable. Return it or try to replace it.
+    -- Must be here, otherwise other substitutions won't happen
+    -- due to replacement of offsets to lists.
+    | Var id <- expr
+    = do
+      let m_subs = inScopeAll scope expr
+          new_e = m_subs <|> Just expr
+      case new_e of
+          Just e -> return $ Right e
+          Nothing -> return $ Left $ OtherError  (text  "This shouldn't happen."
+                                      $$ text "`m_subs <|> Just e` cannot be `Nothing`.")
     | otherwise = return $ Left $ OtherError $ (text "Unsupported expression:" $$ ppr expr)
 
 -----------------
 -- compilation --
 -----------------
-
 
 
 -- | Compile the expression in Core Bind and replace it.
@@ -476,22 +359,31 @@ compileGStorableBind core_bind
     -- Substitute offsets in peeks.
     | (NonRec id expr) <- core_bind
     , isPeekId id
-    -- = return $ Right core_bind -- offsetSubstitution core_bind
     = offsetSubstitution core_bind
     -- Substitute offsets in pokes.
     | (NonRec id expr) <- core_bind
     , isPokeId id
-    -- = return $ Right core_bind
     = offsetSubstitution core_bind
     -- Everything else - nope.
     | otherwise = return $ Left $ CompilationNotSupported core_bind
 
+-- | Lint a binding
+lintBind :: CoreBind -- ^ Core binding to use when returning CompilationError
+         -> CoreBind -- ^ Core binding to check
+         -> CoreM (Either Error CoreBind) -- ^ Success or failure
+lintBind b_old b@(NonRec id expr) = do
+    dyn_flags <- getDynFlags
+    case lintExpr dyn_flags [] expr of
+        Just sdoc -> (putMsg $ text "Lint failed" <+> ppr id ) >> (return $ Left $ CompilationError b_old sdoc)
+        Nothing   -> return $ Right b
+lintBind b_old b@(Rec bs) = do
+    dyn_flags <- getDynFlags
+    let errs = mapMaybe (\(_,expr) -> lintExpr dyn_flags [] expr) bs
+    case errs of
+        [] -> return $ Right b
+        _  -> return $ Left $ CompilationError b_old (vcat errs)
 
-
--- This part could use some optimizations, perhaps.
--- And refactoring... It's hard to read.
-
--- | Substitutes the localIds inside the expression with bodies of provided bindings, if possible.
+-- | Substitutes the localIds inside the bindings with bodies of provided bindings.
 replaceIdsBind :: [CoreBind] -- ^ Replace with - for GStorable bindings
                -> [CoreBind] -- ^ Replace with - for other top-bindings
                -> CoreBind   -- ^ Binding which will have ids replaced.
@@ -499,12 +391,13 @@ replaceIdsBind :: [CoreBind] -- ^ Replace with - for GStorable bindings
 replaceIdsBind gstorable_bs other_bs (NonRec id e) = NonRec id (replaceIds gstorable_bs other_bs e)
 replaceIdsBind gstorable_bs other_bs (Rec    recs) = Rec $ map (\(id,e) -> (id,replaceIds gstorable_bs other_bs e)) recs
 
+-- | Substitutes the localIds inside the expressions with bodies of provided bindings.
 replaceIds :: [CoreBind] -- ^ Replace with - for GStorable bindins
            -> [CoreBind] -- ^ Replace with - for other top-bindings
            -> CoreExpr   -- ^ Expression which will have ids replaced.
            -> CoreExpr   -- ^ Expression with replaced ids.
 replaceIds gstorable_bs other_bs e@(Var id)
-    -- For non recs: GStorable and other.
+    -- For non recs.
     | isLocalId id
     , Just (_,expr) <- find ((id==).fst) $ [(id,expr) | NonRec id expr <- gstorable_bs]
     = replaceIds gstorable_bs other_bs expr
@@ -522,15 +415,22 @@ replaceIds gstorable_bs other_bs e@(Var id)
     = replaceIds gstorable_bs (map Rec rest) expr
     -- If is a global id, or id was not found (local inside the expression) - leave it alone.
     | otherwise = e
+-- Replace on the left and right side of application.
 replaceIds gstorable_bs other_bs (App e1 e2) = App (replaceIds gstorable_bs other_bs e1) (replaceIds gstorable_bs other_bs e2)
+-- Replace the body of lambda expressions.
 replaceIds gstorable_bs other_bs (Lam id e)  = Lam id (replaceIds gstorable_bs other_bs e)
+-- Replace both bindings and the expressions.
 replaceIds gstorable_bs other_bs (Let  b e)  = Let (replaceIdsBind gstorable_bs other_bs b) (replaceIds gstorable_bs other_bs e)
+-- Replace the case_expression and the altenatives.
 replaceIds gstorable_bs other_bs (Case e ev t alts) = do
     let new_e = replaceIds gstorable_bs other_bs e
         new_alts = map (\(alt, ids, exprs) -> (alt,ids, replaceIds gstorable_bs other_bs exprs)) alts
     Case new_e ev t new_alts
+-- Replace the expression in Cast
 replaceIds gstorable_bs other_bs (Cast e c) = Cast (replaceIds gstorable_bs other_bs e) c
+-- Replace the expression in ticks.
 replaceIds gstorable_bs other_bs (Tick t e) = Tick t (replaceIds gstorable_bs other_bs e)
+-- For anything else - just return it.
 replaceIds gstorable_bs other_bs e          = e
 
 -- | Compile ordered binding.
@@ -543,17 +443,24 @@ compileGroups flags bind_groups bind_rest = compileGroups_rec flags 0 bind_group
 
 -- | The insides of compileGroups method.
 compileGroups_rec :: Flags         -- ^ For error handling.
-                  -> Int           -- ^ Depth, usefull for debugging.
+                  -> Int           -- ^ Depth, useful for debugging.
                   -> [[CoreBind]]  -- ^ Ordered GStorable bindings. 
                   -> [CoreBind]    -- ^ Other top-level bindings
                   -> [CoreBind]    -- ^ Succesfull substitutions.
                   -> [CoreBind]    -- ^ Unsuccesfull substitutions.
-                  -> CoreM [CoreBind]
+                  -> CoreM [CoreBind] -- ^ Both successfull and unsuccesfull subtitutions.
 compileGroups_rec flags _ []       bind_rest subs not_subs = return $ concat [subs,not_subs]
 compileGroups_rec flags d (bg:bgs) bind_rest subs not_subs = do
     let layer_replaced = map (replaceIdsBind bind_rest subs) bg
-    -- Compile (and lint TODO)
-    e_compiled <- mapM compileGStorableBind layer_replaced
+    -- Compile and then lint.
+        compile_and_lint bind = do
+            e_compiled <- compileGStorableBind bind
+            -- Monad transformers would be nice here.
+            case e_compiled of
+                Right bind' -> lintBind bind bind'
+                _           -> return e_compiled 
+    -- Compiled (or not) expressions
+    e_compiled <- mapM compile_and_lint layer_replaced
     let errors = lefts e_compiled
         compiled  = rights e_compiled 
     
@@ -588,12 +495,12 @@ compileGroups_error flags d errors = do
            (CompilationNotSupported bind)   -> Just bind
            (CompilationError        bind _) -> Just bind
            -- If we get Nothing, we will probably get missing symbols.
-           -- TODO: Handle such situation.
-           otherwise                        -> Nothing
+           -- TODO: Handle such situations.
+           _                               -> Nothing
 
    -- Print errors
    printer errors
-   -- Crash if conditions are me
+   -- Crash if conditions are met
    when to_crash $ crasher errors
    -- Return bindings
    return $ mapMaybe ungroup errors

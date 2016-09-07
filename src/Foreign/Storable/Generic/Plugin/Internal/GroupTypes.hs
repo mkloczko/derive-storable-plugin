@@ -35,7 +35,7 @@ import CoreMonad (putMsg, putMsgS)
 import GHCi.RemoteTypes
 
 import TyCon
-import Type
+import Type hiding (eqType)
 
 import Unsafe.Coerce
 
@@ -51,13 +51,6 @@ import Foreign.Storable.Generic.Plugin.Internal.Predicates
 import Foreign.Storable.Generic.Plugin.Internal.Types
 
 
--- | Reduce the list of types to list of unique types
-uniqueTypes :: [Type] -> [Type]
-uniqueTypes types = foldl' foldl_fun [] types 
-    where foldl_fun acc t = if t `elemType` acc
-              then acc
-              else t:acc
-
 -- | Calculate the order of types. 
 calcGroupOrder :: [Type] -> ([[Type]], Maybe Error)
 calcGroupOrder types = calcGroupOrder_rec types []
@@ -68,7 +61,7 @@ calcGroupOrder_rec :: [Type]
 calcGroupOrder_rec []    acc = (reverse acc, Nothing)
 calcGroupOrder_rec types acc = do
     let (layer, rest) = calcGroupOrder_iteration types [] [] []
-        layer'       = uniqueTypes layer
+        layer'       = nubBy eqType layer
     if length layer' == 0
         then (reverse acc, Just $ OrderingFailedTypes (length acc) rest)
         else calcGroupOrder_rec rest (layer':acc)
@@ -90,13 +83,16 @@ calcGroupOrder_iteration (t:ts) checked accepted rejected = do
         then calcGroupOrder_iteration ts (t:checked)  accepted    (t:rejected)
         else calcGroupOrder_iteration ts (t:checked) (t:accepted)  rejected
 
-{- Note [Type substitution]
- -
- - TODO
- -}
-
+-- | Used for type substitution. 
+-- Whether a TyVar appears, replace it with a Type.
 type TypeScope = (TyVar, Type)
 
+-- | Functions doing the type substitutions.
+
+-- Examples
+-- 
+-- substituteTyCon [(a,Int)]           a          = Int
+-- substituteTyCon [(a,Int),(b,Char)] (AType b a) = AType Char Int
 substituteTyCon :: [TypeScope] -> Type -> Type
 substituteTyCon []         tc_app             = tc_app
 substituteTyCon type_scope old@(TyVarTy  ty_var) 
@@ -118,7 +114,6 @@ getDataConArgs t
     = do
     -- Substitute data_cons args with type args,
     -- using ty_vars as keys.
-    -- See note [Type substitution].
     let type_scope = zip ty_vars ty_args
         data_cons  = concatMap dataConOrigArgTys $ (visibleDataCons.algTyConRhs) tc
     map (substituteTyCon type_scope) data_cons  
@@ -151,4 +146,4 @@ groupBinds_rec (tg:tgs) binds acc = do
     let (layer, rest) = partition predicate binds
     if length layer == 0 
         then (reverse acc, Just $ OrderingFailedBinds (length acc) rest)
-        else groupBinds_rec tgs rest (layer:acc)
+        else groupBinds_rec tgs rest (reverse layer:acc)

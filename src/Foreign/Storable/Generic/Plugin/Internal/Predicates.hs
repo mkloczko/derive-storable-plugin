@@ -31,14 +31,6 @@ import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import CoreMonad (putMsg, putMsgS)
 
 
-{- Somehow get types, monsieur!
-Do some type-level checking here.
-
-Maybe later ? Just get the basic case running.
-Mkay!
-
-
--}
 
 import Data.Maybe 
 

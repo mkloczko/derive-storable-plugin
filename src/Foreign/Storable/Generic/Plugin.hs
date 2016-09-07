@@ -6,6 +6,8 @@ import Data.Maybe
 
 import Foreign.Storable.Generic.Plugin.Internal
 import Data.IORef
+import Data.List
+import Control.Monad (when)
 
 import Foreign.Storable.Generic.Plugin.Internal.Error
 
@@ -14,41 +16,51 @@ plugin = defaultPlugin {
   installCoreToDos = install
   }
 
-flags = Flags All False
+flags = Flags Some False
 
 orderingPass :: Flags -> IORef [[Type]] -> CoreToDo
-orderingPass flags io_ref = CoreDoPluginPass "GStorable plugin: Calculate Type Ordering" 
+orderingPass flags io_ref = CoreDoPluginPass "GStorable - type ordering" 
                                 (groupTypes flags io_ref)
 
 substitutionPass :: Flags -> IORef [[Type]] -> CoreToDo
-substitutionPass flags io_ref = CoreDoPluginPass "GStorable plugin: Substitute" 
+substitutionPass flags io_ref = CoreDoPluginPass "GStorable - substitution" 
                                 (gstorableSubstitution flags io_ref)
+-- | Checks whether it is a simplifier phase 0
+isPhase0 :: CoreToDo 
+         -> Bool
+isPhase0 (CoreDoSimplify iters simpl_mode) = case sm_phase $ simpl_mode of
+    Phase 0 -> True
+    _       -> False 
+isPhase0 _ = False
 
-printIORefPass :: Outputable t => IORef t -> CoreToDo
-printIORefPass io_ref = CoreDoPluginPass "IORef output" prog
-    where prog x = (putMsg =<< ppr <$> liftIO (readIORef io_ref)) >> return x
+afterPhase0 :: [CoreToDo] -> Maybe Int
+afterPhase0 todos = findIndex isPhase0 todos 
 
--- simpl1 = CoreDoSimplify 2 mode
---     where mode = SimplMode ["Simplifier phase for optimising gsizeOf and galignment methods"] (Phase (-1)) True True True False
--- 
--- 
--- mySimpl1 :: CoreToDo
--- mySimpl1 = CoreDoPluginPass "My own simplifier phase!" simply_simp
---     where simply_simp = SC.simplifyPgm $ CoreDoSimplify 2 (SimplMode [] (Phase (-1)) True True True True)
--- 
--- simpl_0 = CoreDoSimplify 1 mode
---     where mode = SimplMode ["Simplifier phase for optimising gsizeOf and galignment methods"] (Phase 0) True True True True
 
+
+putPasses :: [CommandLineOption] -> [CoreToDo] -> Int -> CoreM [CoreToDo] 
+putPasses opts todos ix = do
+    the_ioref <- liftIO $ newIORef []
+    let (before,after)   = splitAt ix todos
+        ordering   = orderingPass     flags the_ioref
+        substitute = substitutionPass flags the_ioref
+        -- inlinable  = inlinablePass flags the_ioref
+        -- todos = concat [before, [ordering, printing], after', [substitute], after'']
+        new_todos = concat [[ordering], before, [substitute] , after]
+    return new_todos
+
+-- | Inform about installation errors.
+install_err :: Flags -> CoreM ()
+install_err flags = do
+    let (Flags verb to_crash) = flags
+        printer = case verb of
+            None -> empty
+            Some ->    text "The GStorable plugin does not work without simplifier phases."
+                    $$ text "Try to compile the code with -O1 or -O2 optimisation flags."
+    when to_crash $ (return $ error "Crashing...")
 
 install :: [CommandLineOption] -> [CoreToDo] -> CoreM [CoreToDo]
-install opts todo = do
-    putMsgS "Yaay"
-    the_ioref <- liftIO $ newIORef []
-    let (before,after)   = splitAt 0 todo
-        (after',after'') = splitAt 5 after
-        ordering   = orderingPass     flags the_ioref
-        printing   = printIORefPass         the_ioref
-        substitute = substitutionPass flags the_ioref
-        todos = concat [before, [ordering, printing], after', [substitute], after'']
-    putMsg $ ppr todos
-    return todos
+install opts todos = do
+    case afterPhase0 todos of
+        Just ix -> putPasses opts todos ix 
+        Nothing -> install_err flags >> return todos
