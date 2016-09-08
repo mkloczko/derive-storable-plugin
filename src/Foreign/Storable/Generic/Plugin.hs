@@ -76,8 +76,8 @@ install_err :: Flags -> CoreM ()
 install_err flags = do
     let (Flags verb to_crash) = flags
         printer = case verb of
-            None -> return ()
-            Some -> putMsg $ text "The GStorable plugin requires simplifier phases with inlining and rules on, as well as a specialiser phase."
+            None  -> return ()
+            other -> putMsg $ text "The GStorable plugin requires simplifier phases with inlining and rules on, as well as a specialiser phase."
                           $$ text "Try to compile the code with -O1 or -O2 optimisation flags." 
     printer
     when to_crash $ (return $ error "Crashing...")
