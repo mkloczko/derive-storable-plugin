@@ -130,7 +130,7 @@ offsetSubstitution b@(NonRec id expr) = do
     return $ NonRec id <$> e_subs
 
 
--- | The data which can be expressed.
+-- | Scoped variables for optimising offsets.
 data OffsetScope = IntList Id CoreExpr
                  | IntPrimVal  Id CoreExpr
 
