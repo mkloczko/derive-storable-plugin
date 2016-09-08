@@ -117,8 +117,8 @@ intSubstitution b@(NonRec id (Lam _ expr)) = do
 offsetSubstitution :: CoreBind -> CoreM (Either Error CoreBind)
 offsetSubstitution b@(Rec _) = return $ Left $ CompilationNotSupported b
 offsetSubstitution b@(NonRec id expr) = do
-    
     e_subs <- offsetSubstitutionTree [] expr
+    
     let ne_subs = case e_subs of
              -- Add the text from other error.
              Left (OtherError sdoc) 
@@ -127,6 +127,7 @@ offsetSubstitution b@(NonRec id expr) = do
              Left err@(CompilationError _ _) 
                  -> Left $ CompilationError b (pprError Some err)
              a   -> a
+    
     return $ NonRec id <$> e_subs
 
 
@@ -303,7 +304,21 @@ offsetSubstitutionTree scope expr
     | Let bind in_expr <- expr
     = do 
       subs <- offsetSubstitutionTree scope in_expr
-      return $ Let bind <$> subs
+      -- Substitution for the bindings
+      let sub_idexpr (id,e) = do
+              inner_subs <- offsetSubstitutionTree scope e
+              return $ (,) id <$> inner_subs
+          sub_bind (NonRec id e) = do
+              inner_subs <- offsetSubstitutionTree scope e
+              return $ NonRec id <$> inner_subs 
+          sub_bind (Rec bs) = do
+              inner_subs <- mapM sub_idexpr bs
+              case lefts inner_subs of
+                  []      -> return $ Right $ Rec (rights inner_subs)
+                  (err:_) -> return $ Left err
+      bind_subs <- sub_bind bind
+      --
+      return $ Let <$> bind_subs <*> subs
     -- Parse case expr of _ I# x# -> ... expressions.
     -- Compile case_expr and put it in scope as x#
     -- case_expr is of format $w!! @Int offsets 0#

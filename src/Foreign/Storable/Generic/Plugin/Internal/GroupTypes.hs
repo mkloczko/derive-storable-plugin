@@ -96,12 +96,12 @@ type TypeScope = (TyVar, Type)
 substituteTyCon :: [TypeScope] -> Type -> Type
 substituteTyCon []         tc_app             = tc_app
 substituteTyCon type_scope old@(TyVarTy  ty_var) 
--- | Substitute simple type variables
+-- Substitute simple type variables
     = case find (\(av,_) -> av == ty_var) type_scope of
           Just (_, new_type) -> new_type
           Nothing            -> old
 substituteTyCon type_scope (TyConApp tc args)
--- | Substitute type constructors
+-- Substitute type constructors
     = TyConApp tc $ map (substituteTyCon type_scope) args
 substituteTyCon type_scope t = t 
 

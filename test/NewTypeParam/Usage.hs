@@ -15,7 +15,7 @@ flatSizeOf :: NFlat Int Double -> Int
 flatSizeOf = gsizeOf
 
 flatAlignment :: NFlat Int Double -> Int
-flatAlignment = galignmnent
+flatAlignment = galignment
 
 flatPeekByteOff :: Ptr b -> Int -> IO (NFlat Int Double)
 flatPeekByteOff = gpeekByteOff
@@ -31,7 +31,7 @@ nestedSizeOf :: NNested Int Double -> Int
 nestedSizeOf = gsizeOf
 
 nestedAlignment :: NNested Int Double -> Int
-nestedAlignment = galignmnent
+nestedAlignment = galignment
 
 nestedPeekByteOff :: Ptr b -> Int -> IO (NNested Int Double)
 nestedPeekByteOff = gpeekByteOff
@@ -47,7 +47,7 @@ nested2SizeOf :: NNested2 Int Double -> Int
 nested2SizeOf = gsizeOf
 
 nested2Alignment :: NNested2 Int Double -> Int
-nested2Alignment = galignmnent
+nested2Alignment = galignment
 
 nested2PeekByteOff :: Ptr b -> Int -> IO (NNested2 Int Double)
 nested2PeekByteOff = gpeekByteOff

@@ -45,7 +45,7 @@ import Control.Monad.IO.Class
 import Foreign.Storable.Generic.Plugin.Internal.Helpers
 
 
--- | Function for getting types from an id.
+-- Function for getting types from an id.
 import TyCon      (isUnboxedTupleTyCon)
 import TysWiredIn (intTyCon, constraintKind, constraintKindTyCon, listTyCon, intTy)
 import PrelNames  (ioTyConKey, ptrTyConKey, realWorldTyConKey, statePrimTyConKey)

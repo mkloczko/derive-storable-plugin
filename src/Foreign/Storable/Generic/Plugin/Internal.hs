@@ -201,11 +201,8 @@ foundBinds_info flags ids = do
         print_header txt = case verb of
             None  -> empty
             other ->    text "The following bindings are to be optimised:"
-                    -- $+$ nest 4 (text "")
                     $+$ nest 4 txt
         print_binding id = ppr id
-        -- print_binding id = ppr id $$ nest (max_nest+1) (text "::" <+> (ppr $ varType id))
-        --     where len_id = length $ showSDoc dyn_flags $ ppr id 
         max_nest = maximum $ 0 : map (length.(showSDoc dyn_flags).ppr) ids
         -- Print groups of types
         printer the_groups = case the_groups of
