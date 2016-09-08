@@ -4,12 +4,13 @@ The goal of `generic-storable-plugin` is to support the [generic-storable](https
 
 # Usage
 
-Just add a `-fplugin=Foreign.Storable.Generic.Plugin` flag and you're set. You might also want to pass a verbosity flag `-fplugin-opts=Foreign.Storable.Generic.Plugin:-vX` where X is either 0,1 or 2. By default the verbosity flag is set to `-v1`. 
+Just add a `-fplugin=Foreign.Storable.Generic.Plugin` flag and you're set. You might also want to pass a verbosity flag -vX, where X is either 0,1 or 2. By default the verbosity flag is set to `-v1`. 
+
 
 ```haskell
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 {-# OPTIONS_GHC -fplugin=Foreign.Storable.Generic.Plugin #-}
-
+{-# OPTIONS_GHC -fplugin-opt=Foreign.Storable.Generic.Plugin:-v1 #-} 
 module Main where
 
 import GHC.Generics
