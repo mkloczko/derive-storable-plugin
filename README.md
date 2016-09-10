@@ -36,5 +36,5 @@ main = do
 
 # Benchmarks
 
-The plugin was benchmarked using [generic-storable-benchmarks](https://www.github.com/mkloczko/generic-storable-benchmark/tree/plugin) package. The results were obtained handwritten Storable instances, raw GStorable instances and optimised-by-plugin GStorable instances. The code was compiled with -O1 optimisation flag.
+The plugin was benchmarked using [generic-storable-benchmark](https://www.github.com/mkloczko/generic-storable-benchmark/tree/plugin) package. The benchark measures handwritten Storable instances, raw GStorable instances and optimised-by-plugin GStorable instances. The code was compiled with `-O1` optimisation flag.
 ![Benchmarks](https://raw.githubusercontent.com/mkloczko/generic-storable-plugin/images/benchmarks/O1.png)
