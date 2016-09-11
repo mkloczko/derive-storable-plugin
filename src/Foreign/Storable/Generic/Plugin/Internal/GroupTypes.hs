@@ -1,5 +1,5 @@
 {-|
-Module      : Foreign.Storable.Generic.Internal
+Module      : Foreign.Storable.Generic.Plugin.Internal.GroupTypes
 Copyright   : (c) Mateusz Kłoczko, 2016
 License     : MIT
 Maintainer  : mateusz.p.kloczko@gmail.com
