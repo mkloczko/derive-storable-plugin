@@ -1,4 +1,37 @@
-module Foreign.Storable.Generic.Plugin.Internal.Predicates where
+{-|
+Module      : Foreign.Storable.Generic.Internal
+Copyright   : (c) Mateusz Kłoczko, 2016
+License     : MIT
+Maintainer  : mateusz.p.kloczko@gmail.com
+Stability   : experimental
+Portability : portable
+
+Predicates for finding GStorable identifiers, plus some others.
+
+-}
+module Foreign.Storable.Generic.Plugin.Internal.Predicates 
+    (
+    -- Predicates on identifiers
+      isGStorableInstId
+    , isSizeOfId
+    , isAlignmentId
+    , isPeekId
+    , isPokeId
+    , isSpecGStorableInstId
+    , isSpecSizeOfId
+    , isSpecAlignmentId
+    , isSpecPeekId
+    , isSpecPokeId
+    , isOffsetsId
+    -- Groups of above
+    , isGStorableId
+    , isGStorableMethodId
+    -- Miscellanous
+    , isNonRecBind
+    , toIsBind
+    , withTypeCheck
+    )
+where
 
 -- Management of Core.
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
@@ -10,9 +43,6 @@ import OccName (OccName(..), occNameString)
 import qualified Name as N (varName, tcClsName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- import PrelNames (intDataConKey)
--- import FastString (mkFastString)
--- import TysPrim (intPrimTy)
 -- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
@@ -99,6 +129,7 @@ isSpecPokeId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgpok
 -- For offset calculation --
 ----------------------------
 
+-- | Is offsets id.
 isOffsetsId :: Id -> Bool
 isOffsetsId id = getOccName (varName id) == mkOccName N.varName "offsets"
 
@@ -125,14 +156,17 @@ isGStorableMethodId id = any ($id) [isSizeOfId, isAlignmentId
 -- Miscellanous --
 ------------------
 
+-- | Check if binding is non-recursive.
 isNonRecBind :: CoreBind -> Bool
 isNonRecBind (NonRec _ _) = True
 isNonRecBind _            = False
 
+-- | Lift the identifier predicate to work on a core binding.
 toIsBind :: (Id -> Bool) -> CoreBind -> Bool
 toIsBind pred (NonRec id rhs) = pred id
 toIsBind pred (Rec bs)        = any pred $ map fst bs
- 
+
+-- | Use both type getters and identifier predicate to create a predicate.
 withTypeCheck :: (Type -> Maybe Type) -> (Id -> Bool) -> Id -> Bool
 withTypeCheck ty_f id_f id = do
     let ty_checked = ty_f $ varType id

@@ -1,5 +1,19 @@
-{-# LANGUAGE PatternGuards #-}
-module Foreign.Storable.Generic.Plugin.Internal where
+{-|
+Module      : Foreign.Storable.Generic.Internal
+Copyright   : (c) Mateusz Kłoczko, 2016
+License     : MIT
+Maintainer  : mateusz.p.kloczko@gmail.com
+Stability   : experimental
+Portability : portable
+
+Contains methods for calculating type ordering and performing the compile-substitution optimisation.
+
+-}
+
+module Foreign.Storable.Generic.Plugin.Internal 
+    ( groupTypes
+    , gstorableSubstitution)
+where
 
 -- Management of Core.
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
@@ -12,31 +26,28 @@ import OccName (OccName(..), occNameString)
 import qualified Name as N (varName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- import PrelNames (intDataConKey)
--- import FastString (mkFastString)
--- import TysPrim (intPrimTy)
 -- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
-import CoreMonad (CoreM, SimplifierMode(..),CoreToDo(..), getHscEnv, getDynFlags)
+import CoreMonad 
+    (CoreM, SimplifierMode(..), CoreToDo(..), 
+     getHscEnv, getDynFlags, putMsg, putMsgS)
 import BasicTypes (CompilerPhase(..))
 -- Haskell types 
 import Type (isAlgType, splitTyConApp_maybe)
-import TyCon (algTyConRhs, visibleDataCons)
+import TyCon (tyConKind, algTyConRhs, visibleDataCons)
 import TyCoRep (Type(..), TyBinder(..))
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
 
 import MkCore (mkWildValBinder)
 -- Printing
-import Outputable (cat, ppr, SDoc, showSDocUnsafe, showSDoc)
-import Outputable (($$), ($+$), hsep, vcat, empty,text, (<>), (<+>), nest, int, colon,hcat, comma, punctuate, fsep) 
-import CoreMonad (putMsg, putMsgS, CoreM)
+import Outputable 
+    (cat, ppr, SDoc, showSDocUnsafe, showSDoc, 
+     ($$), ($+$), hsep, vcat, empty,text, 
+     (<>), (<+>), nest, int, colon,hcat, comma, 
+     punctuate, fsep) 
 
-import TyCon
-import DataCon
-import TyCon (tyConKind)
-import BasicTypes
 
 import Data.List
 import Data.Maybe
@@ -101,6 +112,9 @@ groupTypes_info flags types = do
     -- Do the printing
     printer types
 
+
+-- | Find GStorable identifiers, obtain their types, and calculate
+-- the order of compilation.
 groupTypes :: Flags -> IORef [[Type]] -> ModGuts -> CoreM ModGuts
 groupTypes flags type_order_ref guts = do
     let binds = mg_binds guts
@@ -132,31 +146,6 @@ groupTypes flags type_order_ref guts = do
     return guts
 
 
-modifyIds :: (Id -> Id) -> CoreBind -> CoreBind
-modifyIds f (NonRec id expr) = NonRec (f id) expr
-modifyIds f (Rec bs) = Rec $ map (\(id,expr) -> (f id, expr) ) bs
-
--- Wonder whether a frontend plugin wouldn't do it's job here.
-changeInlining :: Flags -> IORef [[Type]] -> ModGuts -> CoreM ModGuts
-changeInlining flags type_order_ref guts = do 
-    type_hierarchy <- liftIO $ readIORef type_order_ref 
-    let binds  = mg_binds guts
-        -- Get all GStorable binds.
-        -- Check whether the type has GStorable constraints.
-        typeCheck t = if hasGStorableConstraints t
-            then getGStorableMethodType t
-            else Nothing
-        predicate = toIsBind (withTypeCheck typeCheck isGStorableMethodId)
-        
-        (gstorable_binds,rest) = partition predicate binds
-        -- Modify Inline Pragmas.
-        setInlinable inl_prag = inl_prag {inl_inline = Inline  }
-        new_gstorables = map (modifyIds (\id ->  modifyInlinePragma id (setInlinable)  )) gstorable_binds
-    putMsg $ ppr $ concatMap getIdsBind new_gstorables
-    putMsg $ ppr $ map (inlinePragInfo.idInfo) $ concatMap getIdsBind gstorable_binds
-    putMsg $ ppr $ map (inlinePragInfo.idInfo) $ concatMap getIdsBind new_gstorables
-        
-    return $ guts {mg_binds = concat [new_gstorables, rest] }
 
 ------------------------------------------------
 -- Grouping and compiling GStorable CoreBinds --

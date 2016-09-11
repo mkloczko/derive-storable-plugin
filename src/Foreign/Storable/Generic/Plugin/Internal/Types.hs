@@ -1,4 +1,40 @@
-module Foreign.Storable.Generic.Plugin.Internal.Types where
+{-|
+Module      : Foreign.Storable.Generic.Internal
+Copyright   : (c) Mateusz Kłoczko, 2016
+License     : MIT
+Maintainer  : mateusz.p.kloczko@gmail.com
+Stability   : experimental
+Portability : portable
+
+Functions for obtaining types from GStorable methods and instances.
+
+-}
+module Foreign.Storable.Generic.Plugin.Internal.Types
+    (
+    -- Type predicates
+      isIntType
+    , isPtrType
+    , isIOType
+    , isIOTyCon
+    , isStatePrimType
+    , isStatePrimTyCon
+    , isRealWorldType
+    , isRealWorldTyCon
+    , isGStorableInstTyCon
+    , hasConstraintKind
+    , hasGStorableConstraints
+    -- Used to obtain types
+    , getGStorableInstType
+    , getAlignmentType
+    , getSizeType
+    , getPeekType
+    , getPokeType
+    , getOffsetsType
+    -- Combinations of above
+    , getGStorableType
+    , getGStorableMethodType
+    )
+    where
 
 -- Management of Core.
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
@@ -225,6 +261,7 @@ getPokeType' t after_ptr after_int
     | otherwise = Nothing
 
 
+-- | Get the type of Offsets. Assuming it is [Int]
 getOffsetsType :: Type -> Maybe Type
 getOffsetsType ty
     | TyConApp list_tc [int_t] <- ty
@@ -233,10 +270,10 @@ getOffsetsType ty
     = Just ty
     | otherwise = Nothing
 
--- Combination of all above:
+-- | Combination of type getters for all GStorables.
 getGStorableType :: Type -> Maybe Type
 getGStorableType t = getGStorableInstType t <|> getSizeType t <|> getAlignmentType t <|> getPokeType t <|> getPeekType t
 
--- Combination of methods.
+-- | Combination of type getters for GStorable methods.
 getGStorableMethodType :: Type -> Maybe Type
 getGStorableMethodType t = getSizeType t <|> getAlignmentType t <|> getPokeType t <|> getPeekType t

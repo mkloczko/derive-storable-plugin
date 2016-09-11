@@ -1,3 +1,14 @@
+{-|
+Module      : Foreign.Storable.Generic.Internal
+Copyright   : (c) Mateusz Kłoczko, 2016
+License     : MIT
+Maintainer  : mateusz.p.kloczko@gmail.com
+Stability   : experimental
+Portability : portable
+
+Various helping functions.
+
+-}
 module Foreign.Storable.Generic.Plugin.Internal.Helpers where
 
 -- Management of Core.
@@ -10,9 +21,6 @@ import OccName (OccName(..), occNameString)
 import qualified Name as N (varName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- import PrelNames (intDataConKey)
--- import FastString (mkFastString)
--- import TysPrim (intPrimTy)
 -- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
@@ -54,6 +62,7 @@ getExprsBind :: CoreBind -> [CoreExpr]
 getExprsBind (NonRec _ e) = [e]
 getExprsBind (Rec   recs) = map snd recs
 
+-- | Get both identifiers and expressions from a binding.
 getIdsExprsBind :: CoreBind -> [(Id,CoreExpr)]
 getIdsExprsBind (NonRec id expr) = [(id,expr)]
 getIdsExprsBind (Rec       recs) = recs
@@ -81,7 +90,9 @@ cutOccName :: Int -> OccName -> OccName
 cutOccName n occ_name = mkOccName (occNameSpace occ_name) name_string
     where name_string = take n $ occNameString occ_name
 
+
 -- HACK for type equality
+-- | Equality for types
 eqType :: Type -> Type -> Bool
 eqType (TyVarTy v1) (TyVarTy v2) = v1 == v2
 eqType (AppTy t1a t1b) (AppTy t2a t2b) = t1a `eqType` t2a && t1b `eqType` t2b
@@ -90,11 +101,13 @@ eqType (ForAllTy tb1 t1)  (ForAllTy tb2 t2)  = tb1 `eqTyBind` tb2 && t1 `eqType`
 -- Not dealing with type coercions or casts.
 eqType _ _                     = False
 
+-- | Equality for type binders
 eqTyBind :: TyBinder -> TyBinder -> Bool
 eqTyBind (Named t1 vis1) (Named t2 vis2) = t1 == t2 && vis1 == vis2
 eqTyBind (Anon t1) (Anon t2) = t1 `eqType` t2
 eqTyBind _ _ = False
 
+-- | 'elem' function for types
 elemType :: Type -> [Type] -> Bool
 elemType t [] = False
 elemType t (ot:ts) = (t `eqType` ot) || elemType t ts

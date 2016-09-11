@@ -1,4 +1,22 @@
-module Foreign.Storable.Generic.Plugin.Internal.Error where
+{-|
+Module      : Foreign.Storable.Generic.Internal
+Copyright   : (c) Mateusz Kłoczko, 2016
+License     : MIT
+Maintainer  : mateusz.p.kloczko@gmail.com
+Stability   : experimental
+Portability : portable
+
+Contains the Error datatype and related pretty print functions.  
+
+-}
+module Foreign.Storable.Generic.Plugin.Internal.Error 
+    ( Verbosity(..)
+    , CrashOnWarning(..)
+    , Flags(..)
+    , Error(..)
+    , pprError
+    , stringToPpr
+    ) where
 
 import Id (Id)
 import Var(Var(..))
@@ -18,16 +36,14 @@ type CrashOnWarning = Bool
 data Flags = Flags Verbosity CrashOnWarning
 
 -- | All possible errors.
-data Error = TypeNotFound Id     -- ^ Could not obtain the type from the id.
-           | RecBinding CoreBind -- ^ The binding is recursive and won't be substituted.
-           | CompilationNotSupported CoreBind -- ^ The compilation-substitution is not supported for this.
-           | CompilationError        CoreBind SDoc
-           | CompilationErrorExpr    CoreExpr
-           | OrderingFailedBinds Int [CoreBind]
-           | OrderingFailedTypes Int [Type]
-           | OtherError          SDoc
+data Error = TypeNotFound Id                       -- ^ Could not obtain the type from the id.
+           | RecBinding CoreBind                   -- ^ The binding is recursive and won't be substituted.
+           | CompilationNotSupported CoreBind      -- ^ The compilation-substitution is not supported for the given binding.
+           | CompilationError        CoreBind SDoc -- ^ Error during compilation. The CoreBind is to be returned.
+           | OrderingFailedBinds Int [CoreBind]    -- ^ Ordering failed for core bindings.
+           | OrderingFailedTypes Int [Type]        -- ^ Ordering failed for types
+           | OtherError          SDoc              -- ^ Any other error.
 
--- | How to print type not found
 pprTypeNotFound :: Verbosity -> Id -> SDoc
 pprTypeNotFound None _  = empty 
 pprTypeNotFound Some id 
@@ -35,7 +51,6 @@ pprTypeNotFound Some id
       $$ nest 4 (ppr id <+> text "::" <+> ppr (varType id) )  
 pprTypeNotFound All id  = pprTypeNotFound Some id
 
--- | Printing RecBinding error
 pprRecBinding :: Verbosity -> CoreBind -> SDoc
 pprRecBinding None _ = empty
 pprRecBinding Some (Rec bs) 
@@ -56,7 +71,6 @@ pprRecBinding All  b@(NonRec _ _)
       $+$ nest 4 (ppr b)
       $+$ text ""
 
--- | Printing CompilationNotSupported error
 pprCompilationNotSupported :: Verbosity -> CoreBind -> SDoc
 pprCompilationNotSupported None _   = empty
 pprCompilationNotSupported Some bind 
@@ -71,7 +85,6 @@ pprCompilationNotSupported All  bind
 
 
 
--- | Printing CompilationError error
 pprCompilationError :: Verbosity -> CoreBind -> SDoc -> SDoc
 pprCompilationError None _ _  = empty
 pprCompilationError Some bind sdoc
@@ -88,7 +101,6 @@ pprCompilationError All  bind sdoc
       $+$ nest 4 (ppr bind) 
       $+$ text ""
 
--- | Printing OrderingFailedTypes error
 pprOrderingFailedTypes :: Verbosity -> Int -> [Type] -> SDoc
 pprOrderingFailedTypes None _ _ = empty
 pprOrderingFailedTypes Some depth types 
@@ -97,7 +109,6 @@ pprOrderingFailedTypes Some depth types
     where ppr_types = map ppr types
 pprOrderingFailedTypes All  depth types = pprOrderingFailedTypes Some depth types
 
--- | Printing OrderingFailedBinds error
 pprOrderingFailedBinds :: Verbosity -> Int -> [CoreBind] -> SDoc
 pprOrderingFailedBinds None _ _ = empty
 pprOrderingFailedBinds Some depth binds 
@@ -110,11 +121,12 @@ pprOrderingFailedBinds All  depth binds
       $+$ nest 4 (vcat ppr_binds)
       $+$ text ""
     where ppr_binds = map ppr binds
--- | Printing OtherError.
+
 pprOtherError :: Verbosity -> SDoc -> SDoc
 pprOtherError None _   = empty
 pprOtherError _    sdoc = sdoc
 
+-- | Print an error according to verbosity flag.
 pprError :: Verbosity -> Error -> SDoc
 pprError verb (TypeNotFound            id  ) = pprTypeNotFound verb id
 pprError verb (RecBinding              bind) = pprRecBinding   verb bind

@@ -1,4 +1,23 @@
-module Foreign.Storable.Generic.Plugin.Internal.GroupTypes where
+{-|
+Module      : Foreign.Storable.Generic.Internal
+Copyright   : (c) Mateusz Kłoczko, 2016
+License     : MIT
+Maintainer  : mateusz.p.kloczko@gmail.com
+Stability   : experimental
+Portability : portable
+
+Grouping methods, both for types and core bindings.
+-}
+module Foreign.Storable.Generic.Plugin.Internal.GroupTypes 
+    (
+    -- Type ordering
+      calcGroupOrder
+    , substituteTyCon
+    , getDataConArgs
+    -- CoreBind ordering
+    , groupBinds
+    )
+where
 
 -- Management of Core.
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
@@ -10,9 +29,6 @@ import OccName (OccName(..), occNameString)
 import qualified Name as N (varName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- import PrelNames (intDataConKey)
--- import FastString (mkFastString)
--- import TysPrim (intPrimTy)
 -- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))

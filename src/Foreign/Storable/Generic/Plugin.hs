@@ -1,4 +1,21 @@
-module Foreign.Storable.Generic.Plugin where
+{-|
+Module      : Foreign.Storable.Generic.Plugin
+Copyright   : (c) Mateusz Kłoczko, 2016
+License     : MIT
+Maintainer  : mateusz.p.kloczko@gmail.com
+Stability   : experimental
+Portability : portable
+
+GHC Core plugin for optimising GStorable instances. 
+For more information please refer to generic-storable package.
+
+How to enable:
+
+    * use @-fplugin Foreign.Storable.Generic.Plugin@ option
+    * add @\{\-\# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin \#\-\}@ to the compiled module.
+
+-}
+module Foreign.Storable.Generic.Plugin (plugin) where
 
 import GhcPlugins
 
@@ -11,6 +28,7 @@ import Control.Monad (when)
 
 import Foreign.Storable.Generic.Plugin.Internal.Error
 
+-- | The plugin itself.
 plugin :: Plugin
 plugin = defaultPlugin {
   installCoreToDos = install

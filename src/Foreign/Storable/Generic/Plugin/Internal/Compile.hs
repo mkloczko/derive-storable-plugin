@@ -1,4 +1,42 @@
-module Foreign.Storable.Generic.Plugin.Internal.Compile where
+{-|
+Module      : Foreign.Storable.Generic.Internal
+Copyright   : (c) Mateusz Kłoczko, 2016
+License     : MIT
+Maintainer  : mateusz.p.kloczko@gmail.com
+Stability   : experimental
+Portability : portable
+
+The core of compile and substitute optimisations.
+
+-}
+module Foreign.Storable.Generic.Plugin.Internal.Compile 
+    ( 
+    -- Compilation
+      compileExpr
+    , tryCompileExpr
+    -- Int substitution
+    , intToExpr
+    , intSubstitution
+    -- Offset substitution
+    , offsetSubstitution
+    , offsetSubstitutionTree
+    , OffsetScope(..)
+    , getScopeId
+    , getScopeExpr
+    , intListExpr
+    , exprToIntList
+    , isLitOrGlobal
+    , inScopeAll
+    , isIndexer
+    , caseExprIndex
+    -- GStorable compilation-substitution
+    , compileGStorableBind
+    , lintBind
+    , replaceIdsBind
+    , compileGroups
+    )
+
+where
 
 -- Management of Core.
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt, AltCon(..))
@@ -10,9 +48,6 @@ import OccName (OccName(..), occNameString)
 import qualified Name as N (varName, tvName, tcClsName)
 import SrcLoc (noSrcSpan, SrcSpan)
 import Unique (getUnique)
--- import PrelNames (intDataConKey)
--- import FastString (mkFastString)
--- import TysPrim (intPrimTy)
 -- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
@@ -135,10 +170,12 @@ offsetSubstitution b@(NonRec id expr) = do
 data OffsetScope = IntList Id CoreExpr
                  | IntPrimVal  Id CoreExpr
 
+-- | Get 'Id' from 'OffsetScope'
 getScopeId   :: OffsetScope -> Id
 getScopeId (IntList      id _) = id
 getScopeId (IntPrimVal   id _) = id
 
+-- | Get 'CoreExpr' from 'OffsetScope'
 getScopeExpr :: OffsetScope -> CoreExpr
 getScopeExpr (IntList      _ expr) = expr 
 getScopeExpr (IntPrimVal   _ expr) = expr 
