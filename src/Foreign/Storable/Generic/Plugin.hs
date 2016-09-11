@@ -4,7 +4,7 @@ Copyright   : (c) Mateusz Kłoczko, 2016
 License     : MIT
 Maintainer  : mateusz.p.kloczko@gmail.com
 Stability   : experimental
-Portability : portable
+Portability : GHC-only
 
 GHC Core plugin for optimising GStorable instances. 
 For more information please refer to generic-storable package.

@@ -4,7 +4,7 @@ Copyright   : (c) Mateusz Kłoczko, 2016
 License     : MIT
 Maintainer  : mateusz.p.kloczko@gmail.com
 Stability   : experimental
-Portability : portable
+Portability : GHC-only
 
 Contains methods for calculating type ordering and performing the compile-substitution optimisation.
 
