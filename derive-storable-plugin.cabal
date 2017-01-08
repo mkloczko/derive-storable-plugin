@@ -35,34 +35,39 @@ library
 test-suite ids-concrete
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test/ids/Concrete
+  other-modules:       Types, Instances
   Main-is:             Main.hs
   build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
-                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*
+                    ,  derive-storable, derive-storable-plugin, hspec >= 2.2 && < 2.4, QuickCheck >= 2.8 && < 2.10
 
 test-suite ids-handwritten
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test/ids/Handwritten
+  other-modules:       Types, Instances
   Main-is:             Main.hs
   build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
-                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*
+                    ,  derive-storable, derive-storable-plugin, hspec >= 2.2 && < 2.4, QuickCheck >= 2.8 && < 2.10
 
 test-suite ids-newtype
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test/ids/NewType
+  other-modules:       Types, Instances
   Main-is:             Main.hs
   build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
-                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*
+                    ,  derive-storable, derive-storable-plugin, hspec >= 2.2 && < 2.4, QuickCheck >= 2.8 && < 2.10
 
 test-suite ids-parametrised-spec
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test/ids/ParametrisedSpec
+  other-modules:       Types, Instances, Usage
   Main-is:             Main.hs
   build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
-                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*
+                    ,  derive-storable, derive-storable-plugin, hspec >= 2.2 && < 2.4, QuickCheck >= 2.8 && < 2.10
 
 test-suite ids-typesynonym
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test/ids/TypeSynonym
+  other-modules:       Types, Instances
   Main-is:             Main.hs
   build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
-                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*
+                    ,  derive-storable, derive-storable-plugin, hspec >= 2.2 && < 2.4, QuickCheck >= 2.8 && < 2.10
