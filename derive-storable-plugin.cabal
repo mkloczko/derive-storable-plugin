@@ -2,18 +2,19 @@
 -- further documentation, see http://haskell.org/cabal/users-guide/
 
 name:                derive-storable-plugin
-version:             0.1.0.0
-synopsis:            GHC core plugin supporting the generic-storable package.
--- description:         
-homepage:            https://www.github.com/mkloczko/generic-storable-plugin/
+version:             0.1.0.3
+synopsis:            GHC core plugin supporting the derive-storable package.
+description:         The package helps derive-storable package in forcing compile time evaluation of
+                     sizes, alignments and offsets.
+homepage:            https://www.github.com/mkloczko/derive-storable-plugin/
 license:             MIT
 license-file:        LICENSE
 author:              Mateusz Kłoczko
 maintainer:          mateusz.p.kloczko@gmail.com
 -- copyright:           
 category:            Foreign
-build-type:          Simple
-extra-source-files:  ChangeLog.md
+build-type:          Custom
+extra-source-files:  ChangeLog.md README.md
 cabal-version:       >=1.10
 
 library
@@ -30,3 +31,38 @@ library
   build-depends:       base >=4.9 && <4.10, ghc >= 8.0 && <8.1, ghci >=8.0 && <8.1, derive-storable 
   hs-source-dirs:      src
   default-language:    Haskell2010
+
+test-suite ids-concrete
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test/ids/Concrete
+  Main-is:             Main.hs
+  build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
+                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*
+
+test-suite ids-handwritten
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test/ids/Handwritten
+  Main-is:             Main.hs
+  build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
+                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*
+
+test-suite ids-newtype
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test/ids/NewType
+  Main-is:             Main.hs
+  build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
+                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*
+
+test-suite ids-parametrised-spec
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test/ids/ParametrisedSpec
+  Main-is:             Main.hs
+  build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
+                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*
+
+test-suite ids-typesynonym
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test/ids/TypeSynonym
+  Main-is:             Main.hs
+  build-depends:       base >= 4.8 && < 4.10, ghc >= 8.0 && <8.1, ghci >= 8.0 && <8.1, ghc-paths
+                    ,  derive-storable, derive-storable-plugin, hspec == 2.2.*, QuickCheck == 2.8.*

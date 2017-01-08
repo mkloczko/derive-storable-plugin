@@ -1,8 +1,8 @@
 {-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Instances where
+module TypeSynonymParam.Instances where
 
-import Types
+import TypeSynonymParam.Types
 import Foreign.Storable.Generic
 
 instance (GStorable a, GStorable b) => GStorable (TFlat    a b)

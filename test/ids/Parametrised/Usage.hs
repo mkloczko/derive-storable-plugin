@@ -1,8 +1,8 @@
 {-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-}
-module Usage where
+module Parametrised.Usage where
 
-import Types
-import Instances
+import Parametrised.Types
+import Parametrised.Instances
 
 import Foreign.Storable.Generic
 import Foreign.Ptr

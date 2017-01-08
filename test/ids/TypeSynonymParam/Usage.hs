@@ -1,8 +1,8 @@
 {-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-}
-module Usage where
+module TypeSynonymParam.Usage where
 
-import Types
-import Instances
+import TypeSynonymParam.Types
+import TypeSynonymParam.Instances
 
 import Foreign.Storable.Generic
 import Foreign.Ptr
@@ -15,7 +15,7 @@ flatSizeOf :: TFlat Int Double -> Int
 flatSizeOf = gsizeOf
 
 flatAlignment :: TFlat Int Double -> Int
-flatAlignment = galignmnent
+flatAlignment = galignment
 
 flatPeekByteOff :: Ptr b -> Int -> IO (TFlat Int Double)
 flatPeekByteOff = gpeekByteOff
@@ -31,7 +31,7 @@ nestedSizeOf :: TNested Int Double -> Int
 nestedSizeOf = gsizeOf
 
 nestedAlignment :: TNested Int Double -> Int
-nestedAlignment = galignmnent
+nestedAlignment = galignment
 
 nestedPeekByteOff :: Ptr b -> Int -> IO (TNested Int Double)
 nestedPeekByteOff = gpeekByteOff
@@ -47,7 +47,7 @@ nested2SizeOf :: TNested2 Int Double -> Int
 nested2SizeOf = gsizeOf
 
 nested2Alignment :: TNested2 Int Double -> Int
-nested2Alignment = galignmnent
+nested2Alignment = galignment
 
 nested2PeekByteOff :: Ptr b -> Int -> IO (TNested2 Int Double)
 nested2PeekByteOff = gpeekByteOff

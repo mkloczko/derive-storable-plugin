@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-}
+{-# OPTIONS_GHC -fplugin-opt=Foreign.Storable.Generic.Plugin:-crash #-} 
+
 {-# LANGUAGE FlexibleInstances #-}
 module Instances where
 

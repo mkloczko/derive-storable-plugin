@@ -1,6 +1,6 @@
 # Introduction
 
-The goal of `generic-storable-plugin` is to support the [generic-storable](https://www.github.com/mkloczko/generic-storable) package. It introduces optimisations to GStorable methods derived using GHC.Generics at core-to-core passes. 
+The goal of `derive-storable-plugin` is to support the [derive-storable](http://hackage.haskell.org/package/derive-storable) package. It introduces optimisations to GStorable methods derived using GHC.Generics at core-to-core passes. 
 
 # Usage
 
@@ -36,5 +36,5 @@ main = do
 
 # Benchmarks
 
-The plugin was benchmarked using [generic-storable-benchmark](https://www.github.com/mkloczko/generic-storable-benchmark/tree/plugin) package. The benchark measures handwritten Storable instances, raw GStorable instances and optimised-by-plugin GStorable instances. The code was compiled with `-O1` optimisation flag.
-![Benchmarks](https://raw.githubusercontent.com/mkloczko/generic-storable-plugin/images/benchmarks/O1.png)
+The plugin was benchmarked using [derive-storable-benchmark](https://www.github.com/mkloczko/derive-storable-benchmark/tree/plugin) package. The benchark measures handwritten Storable instances, raw GStorable instances and optimised-by-plugin GStorable instances. The code was compiled with `-O1` optimisation flag.
+![Benchmarks](https://raw.githubusercontent.com/mkloczko/derive-storable-plugin/images/benchmarks/O1.png)

@@ -1,8 +1,8 @@
 {-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-}
 {-# LANGUAGE FlexibleInstances #-}
-module Instances where
+module Parametrised.Instances where
 
-import Types
+import Parametrised.Types
 import Foreign.Storable.Generic
 import Foreign.Ptr 
 
