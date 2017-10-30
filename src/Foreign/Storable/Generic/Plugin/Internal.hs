@@ -120,7 +120,7 @@ groupTypes flags type_order_ref guts = do
     let binds = mg_binds guts
         -- Get GStorable ids that are fully defined.
         all_ids = concatMap getIdsBind binds
-        with_typecheck = withTypeCheck getGStorableType isGStorableId 
+        with_typecheck = withTypeCheck getGStorableType isGStorableId
         predicate id = and [ with_typecheck id
                            , not (hasGStorableConstraints $ varType id)
                            ]
@@ -138,7 +138,7 @@ groupTypes flags type_order_ref guts = do
         type_list = [ t | Just t <- m_gstorable_types]
         -- Calculate the type ordering.
         (type_order,m_error) = calcGroupOrder type_list
-    
+
     groupTypes_info flags type_order
     groupTypes_errors flags bad_types
     
@@ -236,7 +236,7 @@ gstorableSubstitution flags type_order_ref guts = do
         (nonrecs, recs) = partition isNonRecBind gstorable_binds
         -- Group the gstorables by nestedness
         (grouped_binds, m_err_group) = groupBinds type_hierarchy nonrecs
-    
+   
     foundBinds_info flags $ concatMap getIdsBind $ concat grouped_binds 
     -- Check for errors
     not_grouped <- grouping_errors flags m_err_group

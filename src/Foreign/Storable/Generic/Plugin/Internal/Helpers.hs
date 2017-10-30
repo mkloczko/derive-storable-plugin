@@ -9,6 +9,7 @@ Portability : GHC-only
 Various helping functions.
 
 -}
+{-#LANGUAGE CPP#-}
 module Foreign.Storable.Generic.Plugin.Internal.Helpers where
 
 -- Management of Core.
@@ -16,6 +17,9 @@ import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
 import Var (Var(..))
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+import Var (TyVarBndr(..), TyVarBinder)
+#endif
 import Name (getOccName,mkOccName)
 import OccName (OccName(..), occNameString)
 import qualified Name as N (varName)
@@ -97,15 +101,29 @@ eqType :: Type -> Type -> Bool
 eqType (TyVarTy v1) (TyVarTy v2) = v1 == v2
 eqType (AppTy t1a t1b) (AppTy t2a t2b) = t1a `eqType` t2a && t1b `eqType` t2b
 eqType (TyConApp tc1 ts1) (TyConApp tc2 ts2) = tc1 == tc2 && (and $ zipWith eqType ts1 ts2)
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+eqType (ForAllTy tb1 t1)  (ForAllTy tb2 t2)  = tb1 `eqTyVarBind` tb2 && t1 `eqType` t2
+#else
 eqType (ForAllTy tb1 t1)  (ForAllTy tb2 t2)  = tb1 `eqTyBind` tb2 && t1 `eqType` t2
+#endif
 -- Not dealing with type coercions or casts.
 eqType _ _                     = False
 
 -- | Equality for type binders
 eqTyBind :: TyBinder -> TyBinder -> Bool
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+eqTyBind (Named tvb1) (Named tvb2) = tvb1 `eqTyVarBind` tvb2
+#else
 eqTyBind (Named t1 vis1) (Named t2 vis2) = t1 == t2 && vis1 == vis2
+#endif
 eqTyBind (Anon t1) (Anon t2) = t1 `eqType` t2
 eqTyBind _ _ = False
+
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+-- | Equality for type variable binders
+eqTyVarBind :: TyVarBinder -> TyVarBinder -> Bool
+eqTyVarBind (TvBndr t1 arg1) (TvBndr t2 arg2) = t1 == t2 
+#endif
 
 -- | 'elem' function for types
 elemType :: Type -> [Type] -> Bool

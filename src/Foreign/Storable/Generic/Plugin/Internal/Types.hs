@@ -9,6 +9,7 @@ Portability : GHC-only
 Functions for obtaining types from GStorable methods and instances.
 
 -}
+{-#LANGUAGE CPP #-}
 module Foreign.Storable.Generic.Plugin.Internal.Types
     (
     -- Type predicates
@@ -40,7 +41,10 @@ module Foreign.Storable.Generic.Plugin.Internal.Types
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
-import Var (Var(..))
+import Var (Var(..), isId)
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+import Var (TyVarBndr(..), TyVarBinder, binderVar)
+#endif
 import Name (getOccName,mkOccName)
 import OccName (OccName(..), occNameString)
 import qualified Name as N (varName,tcClsName)
@@ -98,6 +102,7 @@ isPtrType :: Type -> Bool
 isPtrType (TyConApp ptr [el]) = getUnique ptr == ptrTyConKey
 isPtrType _                   = False
 
+
 -- | Check whether the type is a IO.
 isIOType :: Type -> Bool
 isIOType (TyConApp io [el]) = isIOTyCon io
@@ -125,6 +130,11 @@ isRealWorldType _                = False
 isRealWorldTyCon :: TyCon -> Bool
 isRealWorldTyCon rw = getUnique rw == realWorldTyConKey
 
+-- | Check whether the type is a State# RealWorld.
+isStateRealWorld :: Type -> Bool
+isStateRealWorld t@(TyConApp st [rl]) = isStatePrimType t && isRealWorldType rl
+isStateRealWorld _ = False
+
 -- | Check whether the type constuctor is a GStorable
 isGStorableInstTyCon :: TyCon -> Bool
 isGStorableInstTyCon tc = getOccName (tyConName tc) == mkOccName N.tcClsName "GStorable" 
@@ -142,7 +152,12 @@ hasConstraintKind ty
 hasGStorableConstraints :: Type -> Bool
 hasGStorableConstraints t
     | ForAllTy bind next  <- t
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    , isId $ binderVar bind
+    , gstorable_cons <- varType $ binderVar bind
+#else
     , Anon gstorable_cons <- bind
+#endif
     , hasConstraintKind gstorable_cons
     , TyConApp gstorable_tc [_] <- gstorable_cons
     , isGStorableInstTyCon gstorable_tc
@@ -168,9 +183,15 @@ getAlignmentType :: Type -> Maybe Type
 getAlignmentType t
     -- Assuming there are no anonymous ty bind between
     -- the type and the integer, ie no : Type -> forall a. Int
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    | FunTy t1 t2 <- t
+    , isIntType t2
+    , the_t <- t1
+#else
     | ForAllTy ty_bind int_t <- t
-    , isIntType int_t 
+    , isIntType int_t
     , Anon the_t <- ty_bind
+#endif
     = Just the_t
     | ForAllTy _ some_t <- t = getAlignmentType some_t
     | otherwise  = Nothing
@@ -180,19 +201,25 @@ getSizeType :: Type -> Maybe Type
 getSizeType t
     -- Assuming there are no anonymous ty bind between
     -- the type and the integer, ie no : Type -> forall a. Int
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    | FunTy t1 t2 <- t
+    , isIntType t2
+    , the_t <- t1
+#else
     | ForAllTy ty_bind int_t <- t
-    , isIntType int_t 
+    , isIntType int_t
     , Anon the_t <- ty_bind
+#endif
     = Just the_t
     | ForAllTy _ some_t <- t = getSizeType some_t
     | otherwise  = Nothing
 
 
+
+
 -- | Get the type from GStorable peek method
 getPeekType :: Type -> Maybe Type
 getPeekType t = getPeekType' t False False
-
-
 
 -- | Insides of getPeekType, which takes into the account
 -- the order of arguments.
@@ -208,15 +235,24 @@ getPeekType' t after_ptr after_int
     = Just the_t
     -- Int -> IO (TheType)
     | after_ptr
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    , FunTy int_t io_t <- t
+#else
     , ForAllTy ty_bind io_t <- t
     , Anon int_t <- ty_bind
+#endif
     , isIntType int_t
     = getPeekType' io_t True True
     -- Ptr b -> Int -> IO (TheType)
-    | ForAllTy ty_bind int_t <- t
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    | ForAllTy ty_bind fun_t <- t
+    , FunTy ptr_t rest <- fun_t 
+#else
+    | ForAllTy ty_bind rest <- t
     , Anon ptr_t <- ty_bind
+#endif
     , isPtrType ptr_t
-    = getPeekType' int_t True False
+    = getPeekType' rest True False
     -- Ignore other types
     -- including constraints and 
     -- Named ty binders.
@@ -225,11 +261,12 @@ getPeekType' t after_ptr after_int
     | otherwise = Nothing
 
 
+
+--isUnboxedTuple2 is State# h 
+
 -- | Get the type from GStorable poke method
 getPokeType :: Type -> Maybe Type
 getPokeType t = getPokeType' t False False
-
-
 
 getPokeType' :: Type 
              -> Bool -- ^ Is after Ptr
@@ -238,21 +275,35 @@ getPokeType' :: Type
 getPokeType' t after_ptr after_int 
     -- Last step: TheType -> IO ()
     | after_ptr, after_int
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    , FunTy the_t io_t <- t
+    , isIOType io_t
+#else
     , ForAllTy ty_bind io_t <- t
     , isIOType io_t
-    , Anon the_t <- ty_bind
+    , Anon the_t  <- ty_bind
+#endif
     = Just the_t
     -- Int -> TheType -> IO ()
     | after_ptr
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    , FunTy int_t rest <- t
+#else
     , ForAllTy ty_bind rest <- t
     , Anon int_t <- ty_bind
+#endif
     , isIntType int_t
     = getPokeType' rest True True
     -- Ptr b -> Int -> TheType -> IO ()
-    | ForAllTy ty_bind int_rest <- t
+#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    | ForAllTy ty_bind fun_t <- t
+    , FunTy ptr_t rest <- fun_t
+#else
+    | ForAllTy ty_bind rest <- t
     , Anon ptr_t <- ty_bind
+#endif 
     , isPtrType ptr_t
-    = getPokeType' int_rest True False
+    = getPokeType' rest True False
     -- Ignore other types
     -- including constraints and 
     -- Named ty binders.
