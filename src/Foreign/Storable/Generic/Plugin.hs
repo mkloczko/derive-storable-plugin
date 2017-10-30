@@ -110,6 +110,9 @@ install opts todos = do
         m_phase0  = afterPhase0     todos
         m_spec    = afterSpecialize todos
 
+    putMsg $  text "Using the plugin." <+> int opt_level
+           $$ text (show m_phase0) <+> text (show m_spec) 
+
     case (m_phase0, m_spec, opt_level) of
         (_       ,_       ,0) -> install_err flags >> return todos
         (Just ph0, Just sp,_) -> putPasses   flags todos (ph0+1) (sp+1)

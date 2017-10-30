@@ -40,7 +40,7 @@ module Foreign.Storable.Generic.Plugin.Internal.Types
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
-import Var (Var(..))
+import Var (Var(..), TyVarBndr(..), TyVarBinder, isId, binderVar)
 import Name (getOccName,mkOccName)
 import OccName (OccName(..), occNameString)
 import qualified Name as N (varName,tcClsName)
@@ -142,7 +142,8 @@ hasConstraintKind ty
 hasGStorableConstraints :: Type -> Bool
 hasGStorableConstraints t
     | ForAllTy bind next  <- t
-    , Anon gstorable_cons <- bind
+    , isId $ binderVar bind
+    , gstorable_cons <- varType $ binderVar bind
     , hasConstraintKind gstorable_cons
     , TyConApp gstorable_tc [_] <- gstorable_cons
     , isGStorableInstTyCon gstorable_tc
@@ -170,7 +171,8 @@ getAlignmentType t
     -- the type and the integer, ie no : Type -> forall a. Int
     | ForAllTy ty_bind int_t <- t
     , isIntType int_t 
-    , Anon the_t <- ty_bind
+    , isId $ binderVar ty_bind
+    , the_t <- varType $ binderVar ty_bind
     = Just the_t
     | ForAllTy _ some_t <- t = getAlignmentType some_t
     | otherwise  = Nothing
@@ -182,7 +184,9 @@ getSizeType t
     -- the type and the integer, ie no : Type -> forall a. Int
     | ForAllTy ty_bind int_t <- t
     , isIntType int_t 
-    , Anon the_t <- ty_bind
+    , isId $ binderVar ty_bind
+    , the_t <- varType $ binderVar ty_bind
+    -- , Anon the_t <- binerVar ty_bind
     = Just the_t
     | ForAllTy _ some_t <- t = getSizeType some_t
     | otherwise  = Nothing
@@ -209,12 +213,14 @@ getPeekType' t after_ptr after_int
     -- Int -> IO (TheType)
     | after_ptr
     , ForAllTy ty_bind io_t <- t
-    , Anon int_t <- ty_bind
+    , isId $ binderVar ty_bind
+    , int_t <- varType $ binderVar ty_bind
     , isIntType int_t
     = getPeekType' io_t True True
     -- Ptr b -> Int -> IO (TheType)
     | ForAllTy ty_bind int_t <- t
-    , Anon ptr_t <- ty_bind
+    , isId $ binderVar ty_bind
+    , ptr_t <- varType $ binderVar ty_bind
     , isPtrType ptr_t
     = getPeekType' int_t True False
     -- Ignore other types
@@ -240,17 +246,20 @@ getPokeType' t after_ptr after_int
     | after_ptr, after_int
     , ForAllTy ty_bind io_t <- t
     , isIOType io_t
-    , Anon the_t <- ty_bind
+    , isId $ binderVar ty_bind
+    , the_t <- varType $ binderVar ty_bind
     = Just the_t
     -- Int -> TheType -> IO ()
     | after_ptr
     , ForAllTy ty_bind rest <- t
-    , Anon int_t <- ty_bind
+    , isId $ binderVar ty_bind
+    , int_t <- varType $ binderVar ty_bind
     , isIntType int_t
     = getPokeType' rest True True
     -- Ptr b -> Int -> TheType -> IO ()
     | ForAllTy ty_bind int_rest <- t
-    , Anon ptr_t <- ty_bind
+    , isId $ binderVar ty_bind
+    , ptr_t <- varType $ binderVar ty_bind
     , isPtrType ptr_t
     = getPokeType' int_rest True False
     -- Ignore other types
