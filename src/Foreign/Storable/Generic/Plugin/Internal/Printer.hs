@@ -19,23 +19,39 @@ import TyCoRep
 import CoreMonad
 import Outputable
 
-printId :: Id -> CoreM ()
+printId :: Id -> SDoc
 printId id
     | isId id
     = printType (varType id)
-    | otherwise = return ()
+    | otherwise = empty
 
-printType :: Type -> CoreM ()
-printType (TyVarTy var) = putMsg $ text "tyvarty"
-printType (AppTy t1 t2) = putMsg $ text "application of a type"
-printType (TyConApp tc k) = putMsg $ text "ty con app"
-printType (ForAllTy tvbindr t) = putMsg $ text "for all type"
-printType (FunTy    t1 t2) = putMsg $ text "fun ty"
-printType (LitTy    tl)    = putMsg $ text "literal type"
-printType (CastTy   t kc) = putMsg $ text "cast type"
-printType (CoercionTy c) = putMsg $ text "coercion"
+printType :: Type -> SDoc
+printType (TyVarTy var) = printVar var
+printType (AppTy t1 t2) = printType t1 <+> text "and" <+> printType t2
+printType (TyConApp tc k) = ppr tc <+> sep (map printType k)
+printType (ForAllTy tvbindr t) = text "forall." <+> printTyVarBinder tvbindr <+> printType t
+printType (FunTy    t1 t2) = parens $ printType t1 <+> text "->" <+> printType t2
+printType (LitTy    tl)    = text "literal type"
+printType (CastTy   t kc) = text "cast type"
+printType (CoercionTy c) = text "coercion"
 
 
+printTyVarBinder :: TyVarBinder -> SDoc
+printTyVarBinder tyvarbndr = printVar (binderVar tyvarbndr) <+> ppr (binderArgFlag tyvarbndr)
+
+
+printTyLit :: TyLit -> SDoc
+printTyLit (NumTyLit int) = text "NumberType"
+printTyLit (StrTyLit str) = text "StringType"
+
+printVar :: Var -> SDoc
+printVar var
+    | isTyVar   var
+    = ppr (varName var)
+    | isTcTyVar var
+    = text "type contructor type"
+    | isId      var
+    = text "id"
 -- Type
 --  = TyVarTy Var
 --  | AppTy Type Type

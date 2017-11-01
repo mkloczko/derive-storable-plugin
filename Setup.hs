@@ -42,4 +42,4 @@ readHook _ _ = do
   str <- readFile file
   return (Just (read str), [])
 
-file = "blaa.info"
+file = "paths.info"

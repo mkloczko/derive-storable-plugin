@@ -169,10 +169,9 @@ getAlignmentType :: Type -> Maybe Type
 getAlignmentType t
     -- Assuming there are no anonymous ty bind between
     -- the type and the integer, ie no : Type -> forall a. Int
-    | ForAllTy ty_bind int_t <- t
-    , isIntType int_t 
-    , isId $ binderVar ty_bind
-    , the_t <- varType $ binderVar ty_bind
+    | FunTy t1 t2 <- t
+    , isIntType t2
+    , the_t <- t1
     = Just the_t
     | ForAllTy _ some_t <- t = getAlignmentType some_t
     | otherwise  = Nothing
@@ -182,11 +181,9 @@ getSizeType :: Type -> Maybe Type
 getSizeType t
     -- Assuming there are no anonymous ty bind between
     -- the type and the integer, ie no : Type -> forall a. Int
-    | ForAllTy ty_bind int_t <- t
-    , isIntType int_t 
-    , isId $ binderVar ty_bind
-    , the_t <- varType $ binderVar ty_bind
-    -- , Anon the_t <- binerVar ty_bind
+    | FunTy t1 t2 <- t
+    , isIntType t2
+    , the_t <- t1
     = Just the_t
     | ForAllTy _ some_t <- t = getSizeType some_t
     | otherwise  = Nothing
@@ -212,17 +209,14 @@ getPeekType' t after_ptr after_int
     = Just the_t
     -- Int -> IO (TheType)
     | after_ptr
-    , ForAllTy ty_bind io_t <- t
-    , isId $ binderVar ty_bind
-    , int_t <- varType $ binderVar ty_bind
+    , FunTy int_t io_t <- t
     , isIntType int_t
     = getPeekType' io_t True True
     -- Ptr b -> Int -> IO (TheType)
-    | ForAllTy ty_bind int_t <- t
-    , isId $ binderVar ty_bind
-    , ptr_t <- varType $ binderVar ty_bind
+    | ForAllTy ty_bind fun_t <- t
+    , FunTy ptr_t rest <- fun_t 
     , isPtrType ptr_t
-    = getPeekType' int_t True False
+    = getPeekType' rest True False
     -- Ignore other types
     -- including constraints and 
     -- Named ty binders.
@@ -244,24 +238,19 @@ getPokeType' :: Type
 getPokeType' t after_ptr after_int 
     -- Last step: TheType -> IO ()
     | after_ptr, after_int
-    , ForAllTy ty_bind io_t <- t
+    , FunTy the_t io_t <- t
     , isIOType io_t
-    , isId $ binderVar ty_bind
-    , the_t <- varType $ binderVar ty_bind
     = Just the_t
     -- Int -> TheType -> IO ()
     | after_ptr
-    , ForAllTy ty_bind rest <- t
-    , isId $ binderVar ty_bind
-    , int_t <- varType $ binderVar ty_bind
+    , FunTy int_t rest <- t
     , isIntType int_t
     = getPokeType' rest True True
     -- Ptr b -> Int -> TheType -> IO ()
-    | ForAllTy ty_bind int_rest <- t
-    , isId $ binderVar ty_bind
-    , ptr_t <- varType $ binderVar ty_bind
+    | ForAllTy ty_bind fun_t <- t
+    , FunTy ptr_t rest <- fun_t
     , isPtrType ptr_t
-    = getPokeType' int_rest True False
+    = getPokeType' rest True False
     -- Ignore other types
     -- including constraints and 
     -- Named ty binders.

@@ -123,7 +123,7 @@ groupTypes flags type_order_ref guts = do
     let binds = mg_binds guts
         -- Get GStorable ids that are fully defined.
         all_ids = concatMap getIdsBind binds
-        with_typecheck = withTypeCheck getGStorableType isGStorableId 
+        with_typecheck = withTypeCheck getGStorableType isGStorableId
         predicate id = and [ with_typecheck id
                            , not (hasGStorableConstraints $ varType id)
                            ]
@@ -149,7 +149,7 @@ groupTypes flags type_order_ref guts = do
     groupTypes_info flags type_order
     groupTypes_info flags (map (\x -> [x]) m_types)
 
-    mapM_ printType m_types
+    mapM_ (\v -> putMsg $ printType (varType v) <+> ppr (isGStorableId v) <+> ppr (isJust ( getGStorableType $ varType v)) ) all_ids
 
     putMsg $ int (length all_ids)
     putMsg $ int (length gstorable_ids)
