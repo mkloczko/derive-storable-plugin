@@ -16,6 +16,7 @@ category:            Foreign
 build-type:          Custom
 extra-source-files:  ChangeLog.md README.md
 cabal-version:       >=1.10
+tested-with:         GHC==8.2.1
 
 library
   exposed-modules:       Foreign.Storable.Generic.Plugin
