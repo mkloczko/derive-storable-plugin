@@ -77,7 +77,7 @@ script:
   # build & run tests, build benchmarks
   - cabal new-build -w ${HC} ${TEST} ${BENCH} all --ghc-options="-fPIC -dynamic"
   - if [ "x$TEST" = "x--enable-tests" ]; then cabal new-test -w ${HC} ${TEST} all --ghc-options="-fPIC -dynamic"; fi
-  - cabal new-test -w ${HC} ${BENCH} all --ghc-options="-fPIC -dynamic"
+  - cabal new-bench -w ${HC} ${BENCH} all --ghc-options="-fPIC -dynamic"
   # haddock
   - rm -rf ./dist-newstyle
   - if $HADDOCK; then cabal new-haddock -w ${HC} --disable-tests --disable-benchmarks all; else echo "Skipping haddock generation";fi
