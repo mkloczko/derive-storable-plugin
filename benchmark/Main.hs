@@ -5,6 +5,7 @@
 import Criterion.Main
 import Criterion.Types
 import TestCases
+import TestCasesOptimized
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array (mallocArray, peekArray, pokeArray)
 import Foreign.Ptr
@@ -58,6 +59,13 @@ singularTests =
            , bench "C4" $ nf sizeOf c4_def
            , bench "C5" $ nf sizeOf c5_def
            ]
+       , bgroup "Optimized" $
+           [ bench "C1" $ nf sizeOf c1o_def
+           , bench "C2" $ nf sizeOf c2o_def
+           , bench "C3" $ nf sizeOf c3o_def
+           , bench "C4" $ nf sizeOf c4o_def
+           , bench "C5" $ nf sizeOf c5o_def
+           ]
        ]
    , bgroup "alignment" $ 
        [ bgroup "Handwritten" $
@@ -73,6 +81,13 @@ singularTests =
            , bench "C3" $ nf alignment c3_def
            , bench "C4" $ nf alignment c4_def
            , bench "C5" $ nf alignment c5_def
+           ]
+       , bgroup "Optimized" $
+           [ bench "C1" $ nf alignment c1o_def
+           , bench "C2" $ nf alignment c2o_def
+           , bench "C3" $ nf alignment c3o_def
+           , bench "C4" $ nf alignment c4o_def
+           , bench "C5" $ nf alignment c5o_def
            ]
        ]
    , bgroup "peek" $
@@ -90,6 +105,13 @@ singularTests =
            , env (malloc @C4  ) $ \ptr -> bench "C4" $ nfIO (peek ptr)
            , env (malloc @C5  ) $ \ptr -> bench "C5" $ nfIO (peek ptr)
            ]
+       , bgroup "Optimized" $
+           [ env (malloc @C1O ) $ \ptr -> bench "C1" $ nfIO (peek ptr)
+           , env (malloc @C2O ) $ \ptr -> bench "C2" $ nfIO (peek ptr)
+           , env (malloc @C3O ) $ \ptr -> bench "C3" $ nfIO (peek ptr)
+           , env (malloc @C4O ) $ \ptr -> bench "C4" $ nfIO (peek ptr)
+           , env (malloc @C5O ) $ \ptr -> bench "C5" $ nfIO (peek ptr)
+           ]
        ] 
   , bgroup "poke" $
       [ bgroup "Handwritten" $     
@@ -105,6 +127,13 @@ singularTests =
           , env malloc $ \ptr -> bench "C3" $ nfIO (poke ptr c3_def)
           , env malloc $ \ptr -> bench "C4" $ nfIO (poke ptr c4_def)
           , env malloc $ \ptr -> bench "C5" $ nfIO (poke ptr c5_def)
+          ]
+      , bgroup "Optimized" $
+          [ env malloc $ \ptr -> bench "C1" $ nfIO (poke ptr c1o_def) 
+          , env malloc $ \ptr -> bench "C2" $ nfIO (poke ptr c2o_def)
+          , env malloc $ \ptr -> bench "C3" $ nfIO (poke ptr c3o_def)
+          , env malloc $ \ptr -> bench "C4" $ nfIO (poke ptr c4o_def)
+          , env malloc $ \ptr -> bench "C5" $ nfIO (poke ptr c5o_def)
           ]
       ]
   ]
