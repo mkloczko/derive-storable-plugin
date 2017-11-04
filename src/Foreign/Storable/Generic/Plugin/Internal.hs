@@ -64,8 +64,6 @@ import Foreign.Storable.Generic.Plugin.Internal.Helpers
 import Foreign.Storable.Generic.Plugin.Internal.Predicates
 import Foreign.Storable.Generic.Plugin.Internal.Types
 
-import Foreign.Storable.Generic.Plugin.Internal.Printer
-
 
 
 --------------------
@@ -119,7 +117,6 @@ groupTypes_info flags types = do
 -- the order of compilation.
 groupTypes :: Flags -> IORef [[Type]] -> ModGuts -> CoreM ModGuts
 groupTypes flags type_order_ref guts = do
-    putMsg $ text "grouping types"
     let binds = mg_binds guts
         -- Get GStorable ids that are fully defined.
         all_ids = concatMap getIdsBind binds
@@ -127,15 +124,11 @@ groupTypes flags type_order_ref guts = do
         predicate id = and [ with_typecheck id
                            , not (hasGStorableConstraints $ varType id)
                            ]
-        predicatt id = and [ not (hasGStorableConstraints $ varType id)
-                           ]
         gstorable_ids = filter predicate all_ids
-        gstorabll_ids = filter predicatt all_ids
         -- Now process them - different ids
         -- will have different type signatures.
         -- It is possible to fetch the types from them.
         m_gstorable_types = map (getGStorableType.varType) gstorable_ids
-        m_types = map (varType) gstorabll_ids
         -- Grab any errors related to types not found.
         bad_types_zip id m_t = case m_t of
             Nothing -> Just $ TypeNotFound id
@@ -145,14 +138,9 @@ groupTypes flags type_order_ref guts = do
         type_list = [ t | Just t <- m_gstorable_types]
         -- Calculate the type ordering.
         (type_order,m_error) = calcGroupOrder type_list
-        debug_ids = filter isGStorableId all_ids
-	todo_ids  = filter (\x -> isGStorableId x && isNothing (getGStorableType $ varType x)) all_ids
+
     groupTypes_info flags type_order
-
-    mapM_ (\v -> putMsg $ printType (varType v) <+> ppr (isGStorableId v) <+> ppr (isJust ( getGStorableType $ varType v)) ) todo_ids
-
     groupTypes_errors flags bad_types
-    -- putMsg $ text (show bad_types)
     
     liftIO $ writeIORef type_order_ref type_order
     return guts
@@ -233,7 +221,6 @@ gstorableSubstitution :: Flags          -- ^ Verbosity and ToCrash options.
                       -> ModGuts        -- ^ Information about compiled module.
                       -> CoreM ModGuts  -- ^ Information about compiled module, with GStorable optimisations.
 gstorableSubstitution flags type_order_ref guts = do 
-    putMsg $ text "substitution"
     type_hierarchy <- liftIO $ readIORef type_order_ref 
     let binds  = mg_binds guts
         -- Get all GStorable binds.
@@ -250,7 +237,6 @@ gstorableSubstitution flags type_order_ref guts = do
         -- Group the gstorables by nestedness
         (grouped_binds, m_err_group) = groupBinds type_hierarchy nonrecs
    
-    putMsg $ text "Doing the substitution..." <+> int (length grouped_binds)
     foundBinds_info flags $ concatMap getIdsBind $ concat grouped_binds 
     -- Check for errors
     not_grouped <- grouping_errors flags m_err_group

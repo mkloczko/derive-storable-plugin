@@ -163,9 +163,6 @@ offsetSubstitution b@(NonRec id expr) = do
              Left err@(CompilationError _ _) 
                  -> Left $ CompilationError b (pprError Some err)
              a   -> a
-    case e_subs of
-        Right whee -> putMsg $ text "Transformed" <+> ppr id <+> text "into" <+> ppr whee
-	Left _     -> return ()
 
     return $ NonRec id <$> e_subs
 
@@ -433,7 +430,6 @@ replaceUnfoldingBind b@(NonRec id expr)
     , unfolding <- unfoldingInfo id_info
     , _ <- uf_tmpl
     = NonRec (setIdInfo id $ id_info {unfoldingInfo = unfolding{uf_tmpl = expr} } ) expr
-    -- = undefined
     | otherwise 
     = b
     
