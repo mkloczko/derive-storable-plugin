@@ -145,15 +145,12 @@ groupTypes flags type_order_ref guts = do
         type_list = [ t | Just t <- m_gstorable_types]
         -- Calculate the type ordering.
         (type_order,m_error) = calcGroupOrder type_list
-    
+        debug_ids = filter isGStorableId all_ids
+	todo_ids  = filter (\x -> isGStorableId x && isNothing (getGStorableType $ varType x)) all_ids
     groupTypes_info flags type_order
-    groupTypes_info flags (map (\x -> [x]) m_types)
 
-    mapM_ (\v -> putMsg $ printType (varType v) <+> ppr (isGStorableId v) <+> ppr (isJust ( getGStorableType $ varType v)) ) all_ids
+    mapM_ (\v -> putMsg $ printType (varType v) <+> ppr (isGStorableId v) <+> ppr (isJust ( getGStorableType $ varType v)) ) todo_ids
 
-    putMsg $ int (length all_ids)
-    putMsg $ int (length gstorable_ids)
-    putMsg $ int (length gstorabll_ids)
     groupTypes_errors flags bad_types
     -- putMsg $ text (show bad_types)
     
@@ -252,7 +249,8 @@ gstorableSubstitution flags type_order_ref guts = do
         (nonrecs, recs) = partition isNonRecBind gstorable_binds
         -- Group the gstorables by nestedness
         (grouped_binds, m_err_group) = groupBinds type_hierarchy nonrecs
-    
+   
+    putMsg $ text "Doing the substitution..." <+> int (length grouped_binds)
     foundBinds_info flags $ concatMap getIdsBind $ concat grouped_binds 
     -- Check for errors
     not_grouped <- grouping_errors flags m_err_group

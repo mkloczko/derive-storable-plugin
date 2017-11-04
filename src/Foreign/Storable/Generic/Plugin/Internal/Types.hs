@@ -98,6 +98,7 @@ isPtrType :: Type -> Bool
 isPtrType (TyConApp ptr [el]) = getUnique ptr == ptrTyConKey
 isPtrType _                   = False
 
+
 -- | Check whether the type is a IO.
 isIOType :: Type -> Bool
 isIOType (TyConApp io [el]) = isIOTyCon io
@@ -124,6 +125,11 @@ isRealWorldType _                = False
 -- | Check whether the type constructor is a RealWorld#
 isRealWorldTyCon :: TyCon -> Bool
 isRealWorldTyCon rw = getUnique rw == realWorldTyConKey
+
+-- | Check whether the type is a State# RealWorld.
+isStateRealWorld :: Type -> Bool
+isStateRealWorld t@(TyConApp st [rl]) = isStatePrimType t && isRealWorldType rl
+isStateRealWorld _ = False
 
 -- | Check whether the type constuctor is a GStorable
 isGStorableInstTyCon :: TyCon -> Bool
@@ -189,11 +195,11 @@ getSizeType t
     | otherwise  = Nothing
 
 
+
+
 -- | Get the type from GStorable peek method
 getPeekType :: Type -> Maybe Type
 getPeekType t = getPeekType' t False False
-
-
 
 -- | Insides of getPeekType, which takes into the account
 -- the order of arguments.
@@ -225,11 +231,12 @@ getPeekType' t after_ptr after_int
     | otherwise = Nothing
 
 
+
+--isUnboxedTuple2 is State# h 
+
 -- | Get the type from GStorable poke method
 getPokeType :: Type -> Maybe Type
 getPokeType t = getPokeType' t False False
-
-
 
 getPokeType' :: Type 
              -> Bool -- ^ Is after Ptr

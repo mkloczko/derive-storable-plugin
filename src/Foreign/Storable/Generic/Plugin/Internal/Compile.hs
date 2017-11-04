@@ -39,10 +39,11 @@ module Foreign.Storable.Generic.Plugin.Internal.Compile
 where
 
 -- Management of Core.
-import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt, AltCon(..))
+import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt, AltCon(..), isId, Unfolding(..))
 import Literal (Literal(..))
-import Id  (isLocalId, isGlobalId,Id)
-import Var (Var(..))
+import Id  (isLocalId, isGlobalId,setIdInfo,Id)
+import IdInfo (IdInfo(..))
+import Var (Var(..), idInfo)
 import Name (getOccName,mkOccName, getSrcSpan)
 import OccName (OccName(..), occNameString)
 import qualified Name as N (varName, tvName, tcClsName)
@@ -162,7 +163,10 @@ offsetSubstitution b@(NonRec id expr) = do
              Left err@(CompilationError _ _) 
                  -> Left $ CompilationError b (pprError Some err)
              a   -> a
-    
+    case e_subs of
+        Right whee -> putMsg $ text "Transformed" <+> ppr id <+> text "into" <+> ppr whee
+	Left _     -> return ()
+
     return $ NonRec id <$> e_subs
 
 
@@ -367,7 +371,8 @@ offsetSubstitutionTree scope expr
       e_new_s <- exprToIntVal x_id new_case_expr 
       case e_new_s of
           Left err       -> return $ Left err
-          Right int_val  ->  offsetSubstitutionTree (int_val:scope) alt_expr 
+          Right int_val  -> offsetSubstitutionTree (int_val:scope) alt_expr 
+      
     -- Normal case expressions. 
     | Case case_expr cb t alts <- expr
     = do
@@ -418,6 +423,20 @@ compileGStorableBind core_bind
     = offsetSubstitution core_bind
     -- Everything else - nope.
     | otherwise = return $ Left $ CompilationNotSupported core_bind
+
+-- | Put the expression back into the unfolding core expr.
+replaceUnfoldingBind :: CoreBind -> CoreBind
+replaceUnfoldingBind b@(NonRec id expr)
+    | NonRec id expr <- b
+    , isId id
+    , id_info <- idInfo id
+    , unfolding <- unfoldingInfo id_info
+    , _ <- uf_tmpl
+    = NonRec (setIdInfo id $ id_info {unfoldingInfo = unfolding{uf_tmpl = expr} } ) expr
+    -- = undefined
+    | otherwise 
+    = b
+    
 
 -- | Lint a binding
 lintBind :: CoreBind -- ^ Core binding to use when returning CompilationError
@@ -509,7 +528,7 @@ compileGroups_rec flags d (bg:bgs) bind_rest subs not_subs = do
             e_compiled <- compileGStorableBind bind
             -- Monad transformers would be nice here.
             case e_compiled of
-                Right bind' -> lintBind bind bind'
+                Right bind' -> lintBind bind (replaceUnfoldingBind bind')
                 _           -> return e_compiled 
     -- Compiled (or not) expressions
     e_compiled <- mapM compile_and_lint layer_replaced
