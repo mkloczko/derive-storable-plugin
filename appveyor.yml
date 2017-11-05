@@ -2,7 +2,7 @@ build: off
 
 before_test:
 # http://help.appveyor.com/discussions/problems/6312-curl-command-not-found
-- set PATH=C:\Program Files\Git\mingw64\bin;%PATH%
+- set PATH=C:\Program Files\Git\mingw64\bin;C:\Users\appveyor\AppData\Roaming\local\bin;%PATH%
 
 - curl -sS -ostack.zip -L --insecure http://www.stackage.org/stack/windows-i386
 - 7z x stack.zip stack.exe
