@@ -14,6 +14,7 @@ environment:
 
 test_script:
 - stack setup --resolver=lts-9 > nul
+- stack init  --resolver=lts-9 --solver
 - echo "" | stack --no-terminal build --resolver=lts-9
 - echo "" | stack --no-terminal test  --resolver=lts-9
 - stack setup --resolver=nightly > nul
