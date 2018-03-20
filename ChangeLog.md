@@ -1,5 +1,9 @@
 # Revision history for generic-storable-plugin
 
+## 0.2.1.0  -- 2018-03-20
+
+* Bump to 8.4
+
 ## 0.2.0.0  -- 2017-11-04
 
 * Support for GHC 8.2.*. 
