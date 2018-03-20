@@ -16,6 +16,8 @@ module Foreign.Storable.Generic.Plugin.Internal
 where
 
 -- Management of Core.
+
+import Prelude hiding ((<>))
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id, modifyInlinePragma, setInlinePragma, idInfo)
@@ -30,7 +32,7 @@ import Unique (getUnique)
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
 import CoreMonad 
-    (CoreM, SimplifierMode(..), CoreToDo(..), 
+    (CoreM, CoreToDo(..), 
      getHscEnv, getDynFlags, putMsg, putMsgS)
 import BasicTypes (CompilerPhase(..))
 -- Haskell types 
