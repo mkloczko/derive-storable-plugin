@@ -16,7 +16,7 @@ category:            Foreign
 build-type:          Simple
 extra-source-files:  ChangeLog.md README.md
 cabal-version:       >=1.10
-tested-with:         GHC==8.0.1, GHC==8.0.2, GHC==8.2.1
+tested-with:         GHC==8.0.1, GHC==8.0.2, GHC==8.2.1, GHC==8.4.1
 
 library
   exposed-modules:       Foreign.Storable.Generic.Plugin
@@ -29,7 +29,7 @@ library
                        , Foreign.Storable.Generic.Plugin.Internal.Types
   -- other-modules:       
   other-extensions:    DeriveGeneric, DeriveAnyClass, PatternGuards
-  build-depends:       base >=4.9 && <4.11, ghc >= 8.0 && <8.3, ghci >= 8.0 && <8.3, derive-storable == 0.1.1.*
+  build-depends:       base >=4.9 && <4.12, ghc >= 8.0 && <8.5, ghci >= 8.0 && <8.5, derive-storable == 0.1.2.*
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -39,7 +39,7 @@ benchmark plugin-benchmark
   default-language:    Haskell2010
   other-modules:       TestCases, TestCasesOptimized
   Main-is:             Main.hs
-  build-depends:       base >= 4.9 && < 4.11, deepseq, criterion >= 1.1.0
+  build-depends:       base >= 4.9 && < 4.12, deepseq, criterion >= 1.1.0
                     ,  derive-storable, derive-storable-plugin
 test-suite ids-concrete
   type:                exitcode-stdio-1.0
@@ -47,7 +47,7 @@ test-suite ids-concrete
   default-language:    Haskell2010
   other-modules:       Types, Instances
   Main-is:             Main.hs
-  build-depends:       base >= 4.9 && < 4.11, ghc >= 8.0 && <8.3, ghci >= 8.0 && <8.3, ghc-paths
+  build-depends:       base >= 4.9 && < 4.12, ghc >= 8.0 && <8.5, ghci >= 8.0 && <8.5, ghc-paths
                     ,  derive-storable, derive-storable-plugin, hspec >= 2.4, QuickCheck >= 2.10
 
 test-suite ids-handwritten
@@ -56,7 +56,7 @@ test-suite ids-handwritten
   default-language:    Haskell2010
   other-modules:       Types, Instances
   Main-is:             Main.hs
-  build-depends:       base >= 4.9 && < 4.11, ghc >= 8.0 && <8.3, ghci >= 8.0 && <8.3, ghc-paths
+  build-depends:       base >= 4.9 && < 4.12, ghc >= 8.0 && <8.5, ghci >= 8.0 && <8.5, ghc-paths
                     ,  derive-storable, derive-storable-plugin, hspec >= 2.4, QuickCheck >= 2.10
 
 test-suite ids-newtype
@@ -65,7 +65,7 @@ test-suite ids-newtype
   default-language:    Haskell2010
   other-modules:       Types, Instances
   Main-is:             Main.hs
-  build-depends:       base >= 4.9 && < 4.11, ghc >= 8.0 && <8.3, ghci >= 8.0 && <8.3, ghc-paths
+  build-depends:       base >= 4.9 && < 4.12, ghc >= 8.0 && <8.5, ghci >= 8.0 && <8.5, ghc-paths
                     ,  derive-storable, derive-storable-plugin, hspec >= 2.4, QuickCheck >= 2.10
 
 test-suite ids-parametrised-spec
@@ -74,7 +74,7 @@ test-suite ids-parametrised-spec
   default-language:    Haskell2010
   other-modules:       Types, Instances, Usage
   Main-is:             Main.hs
-  build-depends:       base >= 4.9 && < 4.11, ghc >= 8.0 && <8.3, ghci >= 8.0 && <8.3, ghc-paths
+  build-depends:       base >= 4.9 && < 4.12, ghc >= 8.0 && <8.5, ghci >= 8.0 && <8.5, ghc-paths
                     ,  derive-storable, derive-storable-plugin, hspec >= 2.4, QuickCheck >= 2.10
 
 test-suite ids-typesynonym
@@ -83,5 +83,5 @@ test-suite ids-typesynonym
   default-language:    Haskell2010
   other-modules:       Types, Instances
   Main-is:             Main.hs
-  build-depends:       base >= 4.9 && < 4.11, ghc >= 8.0 && <8.3, ghci >= 8.0 && <8.3, ghc-paths
+  build-depends:       base >= 4.9 && < 4.12, ghc >= 8.0 && <8.5, ghci >= 8.0 && <8.5, ghc-paths
                     ,  derive-storable, derive-storable-plugin, hspec >= 2.4, QuickCheck >= 2.10

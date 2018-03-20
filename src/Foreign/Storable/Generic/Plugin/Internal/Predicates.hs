@@ -46,7 +46,7 @@ import Unique (getUnique)
 -- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
-import CoreMonad (CoreM, SimplifierMode(..),CoreToDo(..), getHscEnv)
+import CoreMonad (CoreM, CoreToDo(..), getHscEnv)
 import BasicTypes (CompilerPhase(..))
 -- Types 
 import Type (isAlgType, splitTyConApp_maybe)
