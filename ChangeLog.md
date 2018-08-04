@@ -1,5 +1,9 @@
 # Revision history for generic-storable-plugin
 
+## 0.2.2.0  -- 2018-08-04
+
+* Bump to 8.6
+
 ## 0.2.1.0  -- 2018-03-20
 
 * Bump to 8.4

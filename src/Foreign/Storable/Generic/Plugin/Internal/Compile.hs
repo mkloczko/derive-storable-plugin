@@ -9,6 +9,7 @@ Portability : GHC-only
 The core of compile and substitute optimisations.
 
 -}
+{-#LANGUAGE CPP#-}
 module Foreign.Storable.Generic.Plugin.Internal.Compile 
     ( 
     -- Compilation
@@ -42,6 +43,9 @@ where
 import Prelude hiding ((<>))
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt, AltCon(..), isId, Unfolding(..))
 import Literal (Literal(..))
+#if MIN_VERSION_GLASGOW_HASKELL(8,6,0,0)
+import Literal (LitNumType(..))
+#endif
 import Id  (isLocalId, isGlobalId,setIdInfo,Id)
 import IdInfo (IdInfo(..))
 import Var (Var(..), idInfo)
@@ -59,7 +63,7 @@ import BasicTypes (CompilerPhase(..))
 -- Haskell types 
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (tyConName, algTyConRhs, visibleDataCons)
-import TyCoRep (Type(..), TyBinder(..))
+import TyCoRep (Type(..), TyBinder(..), TyLit(..))
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
 
@@ -122,11 +126,20 @@ tryCompileExpr id core_expr  = do
 -- Int substitution --
 ----------------------
 
+-- | A small helper - create an integer literal.
+intLiteral :: (Integral a) => a -> CoreExpr
+#if MIN_VERSION_GLASGOW_HASKELL(8,6,0,0)
+intLiteral i =  Lit $ LitNumber LitNumInt (fromIntegral i) (LitTy (NumTyLit (fromIntegral i)))
+#else
+intLiteral i = Lit $ MachInt $ fromIntegral i
+#endif
+
 -- | Create an expression of form: \x -> 16
 intToExpr :: Type -> Int -> CoreExpr
 intToExpr t i = Lam wild $ App fun arg
     where fun = Var $ dataConWorkId intDataCon
-          arg = Lit $ MachInt $ fromIntegral i
+          -- arg = Lit $ MachInt $ fromIntegral i
+          arg = intLiteral i
           wild= mkWildValBinder t 
 
 -- | For gsizeOf and galignment - calculate the variables.
@@ -197,7 +210,7 @@ intListExpr' :: [Int] -> CoreExpr -> CoreExpr
 intListExpr'  []    acc = acc
 intListExpr' (l:ls) acc = intListExpr' ls $ App int_cons acc
     where int_t_cons = App (Var $ dataConWorkId consDataCon) (Type intTy) 
-          int_val    = App (Var $ dataConWorkId intDataCon ) (Lit $ MachInt $ fromIntegral l) 
+          int_val    = App (Var $ dataConWorkId intDataCon ) (intLiteral l)
           int_cons   = App int_t_cons int_val
 
 -- | Compile expression to list and then write it back to core expr.
@@ -209,7 +222,7 @@ exprToIntList id core_expr = do
 
 -- | Create a int prim expression.
 intPrimValExpr :: Int -> CoreExpr
-intPrimValExpr i = Lit $ MachInt $ fromIntegral i 
+intPrimValExpr i = intLiteral i
 
 -- | Compile expression to int prim and then write it back to core expr.
 exprToIntVal :: Id -> CoreExpr -> CoreM (Either Error OffsetScope)
