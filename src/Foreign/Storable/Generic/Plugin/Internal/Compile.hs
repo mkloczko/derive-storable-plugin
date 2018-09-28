@@ -64,7 +64,8 @@ import BasicTypes (CompilerPhase(..))
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (tyConName, algTyConRhs, visibleDataCons)
 import TyCoRep (Type(..), TyBinder(..), TyLit(..))
-import TysWiredIn (intDataCon)
+import TysWiredIn
+import TysPrim (intPrimTy)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
 
 import MkCore (mkWildValBinder)
@@ -77,7 +78,6 @@ import CoreMonad (putMsg, putMsgS)
 import GHCi.RemoteTypes
 
 -- Used to create types
-import TysWiredIn
 import PrelNames (buildIdKey, augmentIdKey)
 import DataCon (dataConWorkId)
 import BasicTypes (Boxity(..))
@@ -129,7 +129,7 @@ tryCompileExpr id core_expr  = do
 -- | A small helper - create an integer literal.
 intLiteral :: (Integral a) => a -> CoreExpr
 #if MIN_VERSION_GLASGOW_HASKELL(8,6,0,0)
-intLiteral i =  Lit $ LitNumber LitNumInt (fromIntegral i) (LitTy (NumTyLit (fromIntegral i)))
+intLiteral i =  Lit $ LitNumber LitNumInt (fromIntegral i) intPrimTy
 #else
 intLiteral i = Lit $ MachInt $ fromIntegral i
 #endif
