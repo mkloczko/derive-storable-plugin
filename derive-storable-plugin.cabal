@@ -2,7 +2,7 @@
 -- further documentation, see http://haskell.org/cabal/users-guide/
 
 name:                derive-storable-plugin
-version:             0.2.2.0
+version:             0.2.3.0
 synopsis:            GHC core plugin supporting the derive-storable package.
 description:         The package helps derive-storable package in forcing compile time evaluation of
                      sizes, alignments and offsets.
@@ -18,6 +18,10 @@ extra-source-files:  ChangeLog.md README.md
 cabal-version:       >=1.10
 tested-with:         GHC==8.0.1, GHC==8.0.2, GHC==8.2.1, GHC==8.4.1, GHC==8.6.1
 
+Flag sumtypes
+  Description:   Enable support for non-recursive sum types.
+  Default:       False
+
 library
   exposed-modules:       Foreign.Storable.Generic.Plugin
                        , Foreign.Storable.Generic.Plugin.Internal
@@ -29,7 +33,7 @@ library
                        , Foreign.Storable.Generic.Plugin.Internal.Types
   -- other-modules:       
   other-extensions:    DeriveGeneric, DeriveAnyClass, PatternGuards
-  build-depends:       base >=4.9 && <4.13, ghc >= 8.0 && <8.7, ghci >= 8.0 && <8.7, derive-storable >= 0.1.1 && < 0.2
+  build-depends:       base >=4.9 && <4.13, ghc >= 8.0 && <8.7, ghci >= 8.0 && <8.7, derive-storable >= 0.1.1 && < 0.3
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -41,6 +45,9 @@ benchmark plugin-benchmark
   Main-is:             Main.hs
   build-depends:       base >= 4.9 && < 4.13, deepseq, criterion >= 1.1.0
                     ,  derive-storable, derive-storable-plugin
+
+  if flag(sumtypes)
+    cpp-options: -DGSTORABLE_SUMTYPES
 test-suite ids-concrete
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test/ids/Concrete

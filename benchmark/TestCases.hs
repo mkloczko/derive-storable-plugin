@@ -1,9 +1,10 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass, CPP #-}
 module TestCases where 
 
 import GHC.Generics (Generic)
 import Foreign.Storable.Generic
 import Data.Int
+import Data.Word
 import Control.DeepSeq
 
 
@@ -87,3 +88,87 @@ instance Storable C5hw where
         pokeByteOff ptr  off       i32
         pokeByteOff ptr (off + 4)  c2hw
         pokeByteOff ptr (off + 16) c4hw
+
+#ifdef GSTORABLE_SUMTYPES
+
+data S1 = S1a Int32 | S1b Int16    deriving (Show, Generic, GStorable, NFData)
+data S2 = S2a Int32 Int64 Int8 | S2b S1 Int8 Double
+        | S2c Int32 Int8 Int16 Int8 | S2d S1 S1
+        deriving (Show, Generic, GStorable, NFData)
+
+s1_def = S1a 54
+s2_def = S2b s1_def 32 1.5
+
+
+data S1hw = S1hwa Int32 | S1hwb Int16  deriving (Show,Generic, NFData)
+data S2hw = S2hwa Int32 Int64 Int8 | S2hwb S1hw Int8 Double
+          | S2hwc Int32 Int8 Int16 Int8 | S2hwd S1hw S1hw
+          deriving (Show, Generic, NFData)
+
+s1hw_def = S1hwa 54
+s2hw_def = S2hwb s1hw_def 32 1.5
+
+instance Storable S1hw where
+    sizeOf                         _ = 8
+    alignment                      _ = 4
+    peekByteOff ptr off              = do 
+        let peek1 = S1hwa <$> (peekByteOff ptr (off+4) :: IO Int32)
+            peek2 = S1hwb <$> (peekByteOff ptr (off+4) :: IO Int16)
+        tag <- peekByteOff ptr off :: IO Word8 
+        case tag of
+            0 -> peek1
+            1 -> peek2
+            _ -> error "S1hw : Bad tag"
+    pokeByteOff ptr off (S1hwa v) = pokeByteOff ptr off (0 :: Word8) >> pokeByteOff ptr (off+4) v
+    pokeByteOff ptr off (S1hwb v) = pokeByteOff ptr off (1 :: Word8) >> pokeByteOff ptr (off+4) v
+
+instance Storable S2hw where
+    sizeOf                         _ = 32
+    alignment                      _ = 8
+    peekByteOff ptr off              = do 
+        let peek1 = S2hwa <$> (peekByteOff ptr (off+ 8) :: IO Int32)
+                          <*> (peekByteOff ptr (off+16) :: IO Int64)
+                          <*> (peekByteOff ptr (off+24) :: IO  Int8)
+
+            peek2 = S2hwb <$> (peekByteOff ptr (off+ 8) :: IO S1hw)
+                          <*> (peekByteOff ptr (off+16) :: IO Int8)
+                          <*> (peekByteOff ptr (off+24) :: IO Double)
+
+            peek3 = S2hwc <$> (peekByteOff ptr (off+ 8) :: IO Int32)
+                          <*> (peekByteOff ptr (off+12) :: IO  Int8)
+                          <*> (peekByteOff ptr (off+16) :: IO Int16)
+                          <*> (peekByteOff ptr (off+20) :: IO  Int8)
+
+            peek4 = S2hwd <$> (peekByteOff ptr (off+ 8) :: IO S1hw)
+                          <*> (peekByteOff ptr (off+16) :: IO S1hw)
+
+        tag <- peekByteOff ptr off :: IO Word8 
+        case tag of
+            0 -> peek1
+            1 -> peek2
+            2 -> peek3
+            3 -> peek4
+            _ -> error "S1hw : Bad tag"
+
+    pokeByteOff ptr off (S2hwa a b c) = do 
+        pokeByteOff ptr  off     (0 :: Word8) 
+        pokeByteOff ptr (off+ 8)  a
+        pokeByteOff ptr (off+16)  b
+        pokeByteOff ptr (off+24)  c
+    pokeByteOff ptr off (S2hwb a b c) = do
+        pokeByteOff ptr  off     (1 :: Word8) 
+        pokeByteOff ptr (off+ 8)  a
+        pokeByteOff ptr (off+16)  b
+        pokeByteOff ptr (off+24)  c
+    pokeByteOff ptr off (S2hwc a b c d) = do
+        pokeByteOff ptr  off     (2 :: Word8) 
+        pokeByteOff ptr (off+ 8)  a
+        pokeByteOff ptr (off+12)  b
+        pokeByteOff ptr (off+16)  c
+        pokeByteOff ptr (off+24)  d
+    pokeByteOff ptr off (S2hwd a b)     = do
+        pokeByteOff ptr  off     (3 :: Word8) 
+        pokeByteOff ptr (off+ 8)  a
+        pokeByteOff ptr (off+16)  b
+
+#endif

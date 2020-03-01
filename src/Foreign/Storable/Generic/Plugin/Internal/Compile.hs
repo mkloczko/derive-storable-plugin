@@ -158,6 +158,21 @@ intSubstitution b@(NonRec id (Lam _ expr)) = do
         -- If the compilation error occured, first return it.
         Nothing -> 
             return the_integer >> return $ Left $ CompilationError b (text "Type not found")
+intSubstitution b@(NonRec id (App expr _)) = do
+    -- Get HscEnv
+    hsc_env     <- getHscEnv
+    -- Try the subtitution.
+    the_integer <- tryCompileExpr id expr :: CoreM (Either Error Int)
+    -- Get the type.
+    let m_t      = getGStorableType (varType id) 
+    case m_t of
+        Just t ->  return $ NonRec id <$> (intToExpr t <$> the_integer)
+        -- If the compilation error occured, first return it.
+        Nothing -> 
+            return the_integer >> return $ Left $ CompilationError b (text "Type not found")
+intSubstitution b@(NonRec id (Case _ _ _ _)) = error $ "am case"
+intSubstitution b@(NonRec id (Let _ _)) = error $ "am let"
+intSubstitution b@(NonRec id e) = error $ showSDocUnsafe $ ppr e
 
 -----------------------
 -- peek substitution --
