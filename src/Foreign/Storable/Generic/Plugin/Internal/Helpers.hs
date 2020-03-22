@@ -123,7 +123,11 @@ eqTyBind (Named tvb1) (Named tvb2) = tvb1 `eqTyVarBind` tvb2
 #else
 eqTyBind (Named t1 vis1) (Named t2 vis2) = t1 == t2 && vis1 == vis2
 #endif
-eqTyBind (Anon t1) (Anon t2) = t1 `eqType` t2
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+eqTyBind (Anon _ t1) (Anon _ t2) = t1 `eqType` t2
+#else
+eqTyBind (Anon   t1) (Anon   t2) = t1 `eqType` t2
+#endif
 eqTyBind _ _ = False
 
 #if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
@@ -148,7 +152,11 @@ isProxy :: TyVarBinder -> Bool
 isProxy (TvBndr tycovar flag)
 #endif
     | isTyCoVar tycovar
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _ bool star <- varType tycovar
+#else
     , FunTy bool star <- varType tycovar
+#endif
     = True
     | otherwise = False
 
@@ -157,7 +165,11 @@ removeProxy :: Type -> Type
 removeProxy t
     -- forall (proxy :: Bool -> *)
     | ForAllTy fall t1 <- t
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _  ch   t2 <- t1
+#else
     , FunTy    ch   t2 <- t1
+#endif
     , AppTy    pr   bl <- ch
     , TyConApp _ _ <- bl
     , isProxy fall
@@ -165,7 +177,11 @@ removeProxy t
     -- forall (proxy :: Bool -> *) b.
     | ForAllTy fall f2 <- t
     , ForAllTy b    t1 <- f2
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _  ch   t2 <- t1
+#else
     , FunTy    ch   t2 <- t1
+#endif
     , AppTy    pr   bl <- ch
     , TyConApp _ _ <- bl
     , isProxy fall
@@ -173,7 +189,11 @@ removeProxy t
     -- forall b (proxy :: Bool -> *).
     | ForAllTy b    f2 <- t
     , ForAllTy fall t1 <- f2
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _  ch   t2 <- t1
+#else
     , FunTy    ch   t2 <- t1
+#endif
     , AppTy    pr   bl <- ch
     , TyConApp _ _ <- bl
     , isProxy fall

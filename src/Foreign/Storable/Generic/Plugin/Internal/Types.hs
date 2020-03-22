@@ -185,7 +185,12 @@ getAlignmentType :: Type -> Maybe Type
 getAlignmentType t
     -- Assuming there are no anonymous ty bind between
     -- the type and the integer, ie no : Type -> forall a. Int
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    | FunTy _ t1 t2 <- t
+    -- , isIntType t2
+    , TyConApp _ _ <- t2
+    , the_t <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     | FunTy t1 t2 <- t
     , isIntType t2
     , the_t <- t1
@@ -203,7 +208,12 @@ getSizeType :: Type -> Maybe Type
 getSizeType t
     -- Assuming there are no anonymous ty bind between
     -- the type and the integer, ie no : Type -> forall a. Int
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    | FunTy _ t1 t2 <- t
+    -- , isIntType t2
+    , TyConApp _ _ <- t2
+    , the_t <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     | FunTy t1 t2 <- t
     , isIntType t2
     , the_t <- t1
@@ -237,7 +247,9 @@ getPeekType' t after_ptr after_int
     = Just the_t
     -- Int -> IO (TheType)
     | after_ptr
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _ int_t io_t <- t
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy int_t io_t <- t
 #else
     , ForAllTy ty_bind io_t <- t
@@ -246,7 +258,10 @@ getPeekType' t after_ptr after_int
     , isIntType int_t
     = getPeekType' io_t True True
     -- Ptr b -> Int -> IO (TheType)
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    | ForAllTy ty_bind fun_t <- t
+    , FunTy _ ptr_t rest <- fun_t 
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     | ForAllTy ty_bind fun_t <- t
     , FunTy ptr_t rest <- fun_t 
 #else
@@ -277,7 +292,10 @@ getPokeType' :: Type
 getPokeType' t after_ptr after_int 
     -- Last step: TheType -> IO ()
     | after_ptr, after_int
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _ the_t io_t <- t
+    , isIOType io_t
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy the_t io_t <- t
     , isIOType io_t
 #else
@@ -288,7 +306,9 @@ getPokeType' t after_ptr after_int
     = Just the_t
     -- Int -> TheType -> IO ()
     | after_ptr
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _ int_t rest <- t
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy int_t rest <- t
 #else
     , ForAllTy ty_bind rest <- t
@@ -297,7 +317,10 @@ getPokeType' t after_ptr after_int
     , isIntType int_t
     = getPokeType' rest True True
     -- Ptr b -> Int -> TheType -> IO ()
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    | ForAllTy ty_bind fun_t <- t
+    , FunTy _ ptr_t rest <- fun_t
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     | ForAllTy ty_bind fun_t <- t
     , FunTy ptr_t rest <- fun_t
 #else

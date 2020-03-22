@@ -108,19 +108,17 @@ isPokeId id = occStr == compared1
 
 -- | Predicate used to find chSizeOf identifiers
 isChoiceSizeOfId :: Id -> Bool
-isChoiceSizeOfId id = cutted1 == compared1 || cutted2 == compared2
-    where cutted1    = cutOccName 37 $ getOccName (varName id)
-          cutted2    = cutOccName 36 $ getOccName (varName id)
-          compared1 = mkOccName N.varName "$s$fGStorableChoice'Falsea_$cchSizeOf"
-          compared2 = mkOccName N.varName "$s$fGStorableChoice'Truea_$cchSizeOf"
+isChoiceSizeOfId id = occStr == compared1 || occStr == compared2
+    where occStr    = nameStableString $ varName id
+          compared1 = "$_in$$s$fGStorableChoice'Falsea_$cchSizeOf"
+          compared2 = "$_in$$s$fGStorableChoice'Truea_$cchSizeOf"
           
 -- | Predicate used to find chAlignment identifiers
 isChoiceAlignmentId :: Id -> Bool
-isChoiceAlignmentId id = cutted1 == compared1 || cutted2 == compared2
-    where cutted1    = cutOccName 40 $ getOccName (varName id)
-          cutted2    = cutOccName 39 $ getOccName (varName id)
-          compared1 = mkOccName N.varName "$s$fGStorableChoice'Falsea_$cchAlignment"
-          compared2 = mkOccName N.varName "$s$fGStorableChoice'Truea_$cchAlignment"
+isChoiceAlignmentId id = occStr == compared1 || occStr == compared2
+    where occStr     = nameStableString $ varName id
+          compared1 = "$_in$$s$fGStorableChoice'Falsea_$cchAlignment"
+          compared2 = "$_in$$s$fGStorableChoice'Truea_$cchAlignment"
 
 -- | Predicate used to find chPeekByteOff identifiers
 isChoicePeekId :: Id -> Bool
