@@ -145,35 +145,55 @@ intToExpr t i = Lam wild $ App fun arg
 -- | For gsizeOf and galignment - calculate the variables.
 intSubstitution :: CoreBind -> CoreM (Either Error CoreBind)
 intSubstitution b@(Rec    _) = return $ Left $ CompilationNotSupported b
-intSubstitution b@(NonRec id (Lam _ (Lam _ _))) = return $ Left $ CompilationNotSupported b 
-intSubstitution b@(NonRec id (Lam _ expr)) = do
+#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+#endif
+-- For GSTORABLE_SUMTYPES
+intSubstitution b@(NonRec id (Lam l1 l@(Lam l2 e@(Lam l3 expr)))) = do
     -- Get HscEnv
     hsc_env     <- getHscEnv
     -- Try the subtitution.
     the_integer <- tryCompileExpr id expr :: CoreM (Either Error Int)
-    -- Get the type.
     let m_t      = getGStorableType (varType id) 
     case m_t of
-        Just t ->  return $ NonRec id <$> (intToExpr t <$> the_integer)
-        -- If the compilation error occured, first return it.
+        Just t ->  return $ NonRec id <$> (Lam l1 <$> (Lam l2 <$> (intToExpr t <$> the_integer)))
         Nothing -> 
             return the_integer >> return $ Left $ CompilationError b (text "Type not found")
-intSubstitution b@(NonRec id (App expr _)) = do
+-- Without GSTORABLE_SUMPTYPES
+intSubstitution b@(NonRec id (Lam l1 expr)) = do
     -- Get HscEnv
     hsc_env     <- getHscEnv
     -- Try the subtitution.
     the_integer <- tryCompileExpr id expr :: CoreM (Either Error Int)
-    -- Get the type.
     let m_t      = getGStorableType (varType id) 
     case m_t of
         Just t ->  return $ NonRec id <$> (intToExpr t <$> the_integer)
-        -- If the compilation error occured, first return it.
         Nothing -> 
             return the_integer >> return $ Left $ CompilationError b (text "Type not found")
+-- For GHC <= 8.6.5
+intSubstitution b@(NonRec id e@(App expr g)) = case expr of
+     Lam _ (Lam _ (Lam _ e)) -> intSubstitution $ NonRec id expr
+     App e t                 -> do 
+        subs <- intSubstitution $ NonRec id e
+        case subs of
+            Right (NonRec i (Lam l1 (Lam l2 e)) ) -> return (Right $ NonRec i e)
+            err                                   -> return err
+     _                       -> intSubstitutionWorker id expr
 intSubstitution b@(NonRec id (Case _ _ _ _)) = error $ "am case"
 intSubstitution b@(NonRec id (Let _ _)) = error $ "am let"
 intSubstitution b@(NonRec id e) = error $ showSDocUnsafe $ ppr e
 
+intSubstitutionWorker id expr = do
+    -- Get HscEnv
+    hsc_env     <- getHscEnv
+    -- Try the subtitution.
+    the_integer <- tryCompileExpr id expr :: CoreM (Either Error Int)
+    -- Get the type.
+    let m_t      = getGStorableType (varType id) 
+    case m_t of
+        Just t ->  return $ NonRec id <$> (intToExpr t <$> the_integer)
+        -- If the compilation error occured, first return it.
+        Nothing -> 
+            return the_integer >> return $ Left $ CompilationError (NonRec id expr) (text "Type not found")
 -----------------------
 -- peek substitution --
 -----------------------
@@ -183,7 +203,6 @@ offsetSubstitution :: CoreBind -> CoreM (Either Error CoreBind)
 offsetSubstitution b@(Rec _) = return $ Left $ CompilationNotSupported b
 offsetSubstitution b@(NonRec id expr) = do
     e_subs <- offsetSubstitutionTree [] expr
-    
     let ne_subs = case e_subs of
              -- Add the text from other error.
              Left (OtherError sdoc) 
@@ -433,19 +452,19 @@ compileGStorableBind :: CoreBind -> CoreM (Either Error CoreBind)
 compileGStorableBind core_bind
     -- Substitute gsizeOf
     | (NonRec id expr) <- core_bind
-    , isSizeOfId id || isSpecSizeOfId id 
+    , isSizeOfId id || isSpecSizeOfId id || isChoiceSizeOfId id
     = intSubstitution core_bind
     -- Substitute galignment
     | (NonRec id expr) <- core_bind
-    , isAlignmentId id || isSpecAlignmentId id 
+    , isAlignmentId id || isSpecAlignmentId id || isChoiceAlignmentId id
     = intSubstitution core_bind
     -- Substitute offsets in peeks.
     | (NonRec id expr) <- core_bind
-    , isPeekId id      || isSpecPeekId id
+    , isPeekId id      || isSpecPeekId id || isChoicePeekId id
     = offsetSubstitution core_bind
     -- Substitute offsets in pokes.
     | (NonRec id expr) <- core_bind
-    , isPokeId id      || isSpecPokeId id
+    , isPokeId id      || isSpecPokeId id || isChoicePokeId id
     = offsetSubstitution core_bind
     -- Everything else - nope.
     | otherwise = return $ Left $ CompilationNotSupported core_bind

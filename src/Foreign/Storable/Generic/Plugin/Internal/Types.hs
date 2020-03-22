@@ -42,7 +42,9 @@ import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
 import Var (Var(..), isId)
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+import Var (TyVarBinder, VarBndr(..), binderVar)
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 import Var (TyVarBndr(..), TyVarBinder, binderVar)
 #endif
 import Name (getOccName,mkOccName)
@@ -323,7 +325,8 @@ getOffsetsType ty
 
 -- | Combination of type getters for all GStorables.
 getGStorableType :: Type -> Maybe Type
-getGStorableType t = getGStorableInstType t <|> getSizeType t <|> getAlignmentType t <|> getPokeType t <|> getPeekType t
+getGStorableType t' = getGStorableInstType t <|> getSizeType t <|> getAlignmentType t <|> getPokeType t <|> getPeekType t
+    where t = removeProxy t'
 
 -- | Combination of type getters for GStorable methods.
 getGStorableMethodType :: Type -> Maybe Type
