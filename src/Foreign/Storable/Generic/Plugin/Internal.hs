@@ -230,7 +230,8 @@ gstorableSubstitution flags type_order_ref guts = do
         typeCheck t = if hasGStorableConstraints t
             then Nothing
             else getGStorableMethodType t
-        predicate = toIsBind (withTypeCheck typeCheck isGStorableMethodId)
+        -- predicate = toIsBind (withTypeCheck typeCheck isGStorableMethodId)
+        predicate = toIsBind (isGStorableMethodId)
         
         (gstorable_binds,rest) = partition predicate binds
         -- Check if there are any recursives somehow

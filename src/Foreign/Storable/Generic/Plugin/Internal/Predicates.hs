@@ -9,6 +9,7 @@ Portability : GHC-only
 Predicates for finding GStorable identifiers, plus some others.
 
 -}
+{-#LANGUAGE CPP#-}
 module Foreign.Storable.Generic.Plugin.Internal.Predicates 
     (
     -- Predicates on identifiers
@@ -22,6 +23,10 @@ module Foreign.Storable.Generic.Plugin.Internal.Predicates
     , isSpecAlignmentId
     , isSpecPeekId
     , isSpecPokeId
+    , isChoiceSizeOfId
+    , isChoiceAlignmentId
+    , isChoicePeekId
+    , isChoicePokeId
     , isOffsetsId
     -- Groups of above
     , isGStorableId
@@ -61,12 +66,11 @@ import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import CoreMonad (putMsg, putMsgS)
 
 
+import Name (nameStableString)
 
 import Data.Maybe 
 
 import Foreign.Storable.Generic.Plugin.Internal.Helpers
-
-
 
 
 -- | Predicate used to find GStorable instances identifiers.
@@ -88,11 +92,47 @@ isAlignmentId ident = getOccName (varName ident) == mkOccName N.varName "$cgalig
 
 -- | Predicate used to find gpeekByteOff identifiers
 isPeekId :: Id -> Bool
-isPeekId ident = getOccName (varName ident) == mkOccName N.varName "$cgpeekByteOff" 
+isPeekId id = occStr == compared1
+    where occStr     = nameStableString $ varName id
+          compared1 = "$_in$$cgpeekByteOff"
 
 -- | Predicate used to find gpeekByteOff identifiers
 isPokeId :: Id -> Bool
-isPokeId ident = getOccName (varName ident) == mkOccName N.varName "$cgpokeByteOff" 
+isPokeId id = occStr == compared1
+    where occStr     = nameStableString $ varName id
+          compared1 = "$_in$$cgpokeByteOff"
+
+--------------------------------------------
+--GStorableChoice methods' identifiers    --
+--------------------------------------------
+
+-- | Predicate used to find chSizeOf identifiers
+isChoiceSizeOfId :: Id -> Bool
+isChoiceSizeOfId id = occStr == compared1 || occStr == compared2
+    where occStr    = nameStableString $ varName id
+          compared1 = "$_in$$s$fGStorableChoice'Falsea_$cchSizeOf"
+          compared2 = "$_in$$s$fGStorableChoice'Truea_$cchSizeOf"
+          
+-- | Predicate used to find chAlignment identifiers
+isChoiceAlignmentId :: Id -> Bool
+isChoiceAlignmentId id = occStr == compared1 || occStr == compared2
+    where occStr     = nameStableString $ varName id
+          compared1 = "$_in$$s$fGStorableChoice'Falsea_$cchAlignment"
+          compared2 = "$_in$$s$fGStorableChoice'Truea_$cchAlignment"
+
+-- | Predicate used to find chPeekByteOff identifiers
+isChoicePeekId :: Id -> Bool
+isChoicePeekId id = compared1 == occStr || compared2 == occStr
+    where occStr     = nameStableString $ varName id
+          compared1 = "$_in$$s$fGStorableChoice'Falsea_$cchPeekByteOff"
+          compared2 = "$_in$$s$fGStorableChoice'Truea_$cchPeekByteOff"
+
+-- | Predicate used to find chPokeByteOff identifiers
+isChoicePokeId :: Id -> Bool
+isChoicePokeId id = compared1 == occStr || compared2 == occStr
+    where occStr     = nameStableString $ varName id
+          compared1 = "$_in$$s$fGStorableChoice'Falsea_$cchPokeByteOff"
+          compared2 = "$_in$$s$fGStorableChoice'Truea_$cchPokeByteOff"
 
 
 --------------------------------------------
@@ -151,6 +191,10 @@ isGStorableMethodId id = any ($id) [isSizeOfId, isAlignmentId
                                    , isPeekId, isPokeId
                                    , isSpecSizeOfId, isSpecAlignmentId
                                    , isSpecPeekId, isSpecPokeId
+#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+                                   , isChoiceSizeOfId, isChoiceAlignmentId
+                                   , isChoicePeekId, isChoicePokeId
+#endif
                                    ]
 ------------------                                   
 -- Miscellanous --

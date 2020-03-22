@@ -17,7 +17,9 @@ import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
 import Var (Var(..))
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+import Var (TyVarBinder(..), VarBndr(..))
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 import Var (TyVarBndr(..), TyVarBinder)
 #endif
 import Name (getOccName,mkOccName)
@@ -33,7 +35,11 @@ import BasicTypes (CompilerPhase(..))
 -- Haskell types 
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (algTyConRhs, visibleDataCons)
+#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+import TyCoRep (Type(..), TyBinder(..), TyCoBinder(..))
+#else 
 import TyCoRep (Type(..), TyBinder(..))
+#endif
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
 
@@ -52,8 +58,9 @@ import Unsafe.Coerce
 import Data.List
 import Data.Maybe
 import Data.Either
-import Debug.Trace
 import Control.Monad.IO.Class
+
+import Var
 
 
 -- | Get ids from core bind.
@@ -116,10 +123,17 @@ eqTyBind (Named tvb1) (Named tvb2) = tvb1 `eqTyVarBind` tvb2
 #else
 eqTyBind (Named t1 vis1) (Named t2 vis2) = t1 == t2 && vis1 == vis2
 #endif
-eqTyBind (Anon t1) (Anon t2) = t1 `eqType` t2
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+eqTyBind (Anon _ t1) (Anon _ t2) = t1 `eqType` t2
+#else
+eqTyBind (Anon   t1) (Anon   t2) = t1 `eqType` t2
+#endif
 eqTyBind _ _ = False
 
-#if MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+eqTyVarBind :: TyVarBinder -> TyVarBinder -> Bool
+eqTyVarBind (Bndr t1 arg1) (Bndr t2 arg2) = t1 == t2 
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 -- | Equality for type variable binders
 eqTyVarBind :: TyVarBinder -> TyVarBinder -> Bool
 eqTyVarBind (TvBndr t1 arg1) (TvBndr t2 arg2) = t1 == t2 
@@ -129,3 +143,76 @@ eqTyVarBind (TvBndr t1 arg1) (TvBndr t2 arg2) = t1 == t2
 elemType :: Type -> [Type] -> Bool
 elemType t [] = False
 elemType t (ot:ts) = (t `eqType` ot) || elemType t ts
+
+#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+isProxy :: TyCoVarBinder -> Bool
+isProxy (Bndr tycovar flag) 
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+isProxy :: TyVarBinder -> Bool
+isProxy (TvBndr tycovar flag)
+#else
+isProxy :: TyBinder -> Bool
+isProxy (Anon t) = False
+isProxy (Named tycovar flag)
+#endif
+    | isTyCoVar tycovar
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _ bool star <- varType tycovar
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    , FunTy bool star <- varType tycovar
+#else 
+    , ForAllTy bool   star <- varType tycovar
+#endif
+    = True
+    | otherwise = False
+
+
+removeProxy :: Type -> Type
+removeProxy t
+    -- forall (proxy :: Bool -> *)
+    | ForAllTy fall t1 <- t
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _  ch   t2 <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    , FunTy    ch   t2 <- t1
+#else 
+    , ForAllTy ch'   t2 <- t
+    , Anon     ch       <- ch'
+#endif
+    , AppTy    pr   bl <- ch
+    , TyConApp _ _ <- bl
+    , isProxy fall
+    = t2
+    -- forall (proxy :: Bool -> *) b.
+    | ForAllTy fall f2 <- t
+    , ForAllTy b    t1 <- f2
+#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _  ch   t2 <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    , FunTy    ch   t2 <- t1
+#else 
+    , ForAllTy ch'   t2 <- t
+    , Anon     ch       <- ch'
+#endif
+    , AppTy    pr   bl <- ch
+    , TyConApp _ _ <- bl
+    , isProxy fall
+    = ForAllTy b t2
+    -- forall b (proxy :: Bool -> *).
+    | ForAllTy b    f2 <- t
+    , ForAllTy fall t1 <- f2
+#if   MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+    , FunTy _  ch   t2 <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+    , FunTy    ch   t2 <- t1
+#else 
+    , ForAllTy ch'  t2 <- t
+    , Anon     ch      <- ch'
+#endif
+    , AppTy    pr   bl <- ch
+    , TyConApp _ _ <- bl
+    , isProxy fall
+    = ForAllTy b t2
+    | otherwise
+    = t
+

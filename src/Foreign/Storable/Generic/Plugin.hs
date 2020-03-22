@@ -36,7 +36,6 @@ plugin = defaultPlugin {
 
 defFlags = Flags Some False
 
-
 orderingPass :: Flags -> IORef [[Type]] -> CoreToDo
 orderingPass flags io_ref = CoreDoPluginPass "GStorable - type ordering" 
                                 (groupTypes flags io_ref)

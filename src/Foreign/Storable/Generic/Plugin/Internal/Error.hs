@@ -101,6 +101,7 @@ pprCompilationError All  bind sdoc
       $+$ nest 4 (ppr bind) 
       $+$ text ""
 
+
 pprOrderingFailedTypes :: Verbosity -> Int -> [Type] -> SDoc
 pprOrderingFailedTypes None _ _ = empty
 pprOrderingFailedTypes Some depth types 
@@ -114,7 +115,7 @@ pprOrderingFailedBinds None _ _ = empty
 pprOrderingFailedBinds Some depth binds 
     =    text "CoreBind ordering failed at depth" <+> int depth <+> text "for bindings:"
       $$ nest 4 (vcat ppr_ids)
-    where ppr_ids = map (\id -> ppr id <+> text "::" <+> ppr (varType id) ) $ concatMap getIdsBind binds
+    where ppr_ids = map (\id -> ppr id <+> text "::" <+> ppr (varType id)) $ concatMap getIdsBind binds
 pprOrderingFailedBinds All  depth binds
     =     text "--- CoreBind ordering failed at depth" <+> int depth <+> text "for bindings ---"
       $+$ text "\n"
