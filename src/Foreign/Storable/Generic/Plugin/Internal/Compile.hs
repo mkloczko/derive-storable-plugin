@@ -370,6 +370,8 @@ offsetSubstitutionTree scope e@(Tick t expr) = do
     return $ Tick t <$> subs
 -- Leave types alone.
 offsetSubstitutionTree scope e@(Type _  )    = return $ Right e
+-- And coercions too.
+offsetSubstitutionTree scope e@(Coercion _)    = return $ Right e
 -- Do substitutions for the lambda body.
 offsetSubstitutionTree scope e@(Lam  b expr) = do
     subs <- offsetSubstitutionTree scope expr

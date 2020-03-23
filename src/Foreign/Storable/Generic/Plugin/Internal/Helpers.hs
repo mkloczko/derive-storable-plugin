@@ -147,15 +147,21 @@ elemType t (ot:ts) = (t `eqType` ot) || elemType t ts
 #if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
 isProxy :: TyCoVarBinder -> Bool
 isProxy (Bndr tycovar flag) 
-#else
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 isProxy :: TyVarBinder -> Bool
 isProxy (TvBndr tycovar flag)
+#else
+isProxy :: TyBinder -> Bool
+isProxy (Anon t) = False
+isProxy (Named tycovar flag)
 #endif
     | isTyCoVar tycovar
 #if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _ bool star <- varType tycovar
-#else
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy bool star <- varType tycovar
+#else 
+    , ForAllTy bool   star <- varType tycovar
 #endif
     = True
     | otherwise = False
@@ -167,8 +173,11 @@ removeProxy t
     | ForAllTy fall t1 <- t
 #if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _  ch   t2 <- t1
-#else
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy    ch   t2 <- t1
+#else 
+    , ForAllTy ch'   t2 <- t
+    , Anon     ch       <- ch'
 #endif
     , AppTy    pr   bl <- ch
     , TyConApp _ _ <- bl
@@ -179,8 +188,11 @@ removeProxy t
     , ForAllTy b    t1 <- f2
 #if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _  ch   t2 <- t1
-#else
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy    ch   t2 <- t1
+#else 
+    , ForAllTy ch'   t2 <- t
+    , Anon     ch       <- ch'
 #endif
     , AppTy    pr   bl <- ch
     , TyConApp _ _ <- bl
@@ -189,10 +201,13 @@ removeProxy t
     -- forall b (proxy :: Bool -> *).
     | ForAllTy b    f2 <- t
     , ForAllTy fall t1 <- f2
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _  ch   t2 <- t1
-#else
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy    ch   t2 <- t1
+#else 
+    , ForAllTy ch'  t2 <- t
+    , Anon     ch      <- ch'
 #endif
     , AppTy    pr   bl <- ch
     , TyConApp _ _ <- bl
