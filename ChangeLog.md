@@ -2,6 +2,10 @@
 
 ## 0.2.3.0  -- 2020-03-23
 
+* Support for derive-storable 0.3.0.0
+
+## 0.2.3.0  -- 2020-03-23
+
 * Support for derive-storable 0.2.0.0
 * Bump to 8.8
 * Prepared for 8.10

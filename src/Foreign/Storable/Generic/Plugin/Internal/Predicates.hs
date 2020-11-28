@@ -184,6 +184,10 @@ isGStorableId id = any ($id) [ isSizeOfId, isAlignmentId, isPeekId
                              , isSpecSizeOfId, isSpecAlignmentId
                              , isSpecPeekId, isSpecPokeId
                              , isSpecGStorableInstId
+#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+                             , isChoiceSizeOfId, isChoiceAlignmentId
+                             , isChoicePeekId, isChoicePokeId
+#endif
                              ]
 -- | Is the id an GStorable method.
 isGStorableMethodId :: Id -> Bool 

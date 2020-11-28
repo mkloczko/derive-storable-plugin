@@ -2,7 +2,7 @@
 -- further documentation, see http://haskell.org/cabal/users-guide/
 
 name:                derive-storable-plugin
-version:             0.2.3.0
+version:             0.2.3.1
 synopsis:            GHC core plugin supporting the derive-storable package.
 description:         The package helps derive-storable package in forcing compile time evaluation of
                      sizes, alignments and offsets.
@@ -31,9 +31,8 @@ library
                        , Foreign.Storable.Generic.Plugin.Internal.Helpers
                        , Foreign.Storable.Generic.Plugin.Internal.Predicates
                        , Foreign.Storable.Generic.Plugin.Internal.Types
-  -- other-modules:       
   other-extensions:    DeriveGeneric, DeriveAnyClass, PatternGuards
-  build-depends:       base >=4.9 && <4.14, ghc >= 8.0 && <8.9, ghci >= 8.0 && <8.9, derive-storable >= 0.1.1 && < 0.3
+  build-depends:       base >=4.9 && <4.14, ghc >= 8.0 && <8.9, ghci >= 8.0 && <8.9, derive-storable >= 0.3 && < 0.4
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -56,17 +55,6 @@ test-suite c_alignment
   c-sources:           test/Basic/cbits/TestCases.c 
   main-is:             MemoryCSpec.hs
   other-modules:       TestCases 
---                       , Foreign.Storable.Generic.Plugin
---                       , Foreign.Storable.Generic.Plugin.Internal
---                       , Foreign.Storable.Generic.Plugin.Internal.Error
---                       , Foreign.Storable.Generic.Plugin.Internal.Compile
---                       , Foreign.Storable.Generic.Plugin.Internal.GroupTypes
---                       , Foreign.Storable.Generic.Plugin.Internal.Helpers
---                       , Foreign.Storable.Generic.Plugin.Internal.Predicates
---                       , Foreign.Storable.Generic.Plugin.Internal.Types
---  ghc-options:         -fplugin=Foreign.Storable.Generic.Plugin
---                       -fplugin-opt=Foreign.Storable.Generic.Plugin:-crash
---                       -fplugin-opt=Foreign.Storable.Generic.Plugin:-v2
   build-depends:       base >= 4.8 && < 5, derive-storable, derive-storable-plugin
                      , hspec >= 2.4, QuickCheck >= 2.10
                      , ghc >= 8.0 && <8.9, ghci >= 8.0 && <8.9
