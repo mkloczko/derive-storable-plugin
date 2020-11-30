@@ -31,7 +31,8 @@ import Foreign.Storable.Generic.Plugin.Internal.Error
 -- | The plugin itself.
 plugin :: Plugin
 plugin = defaultPlugin {
-  installCoreToDos = install
+  installCoreToDos = install,
+  pluginRecompile = \_ -> pure NoForceRecompile
   }
 
 defFlags = Flags Some False
