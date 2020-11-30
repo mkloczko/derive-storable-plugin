@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, CPP #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, DerivingVia, CPP #-}
 {-# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin #-}
 {-# OPTIONS_GHC -fplugin-opt=Foreign.Storable.Generic.Plugin:-crash #-} 
 {-# OPTIONS_GHC -fplugin-opt=Foreign.Storable.Generic.Plugin:-v2 #-} 
@@ -10,11 +10,16 @@ import Data.Int
 import Control.DeepSeq
 
 
-data C1O = C1O Int32                 deriving (Show, Generic, GStorable, NFData)
-data C2O = C2O Int8 Int32 Int16      deriving (Show, Generic, GStorable, NFData)
-data C3O = C3O C2O Int64 C1O         deriving (Show, Generic, GStorable, NFData)
-data C4O = C4O Double Int8 C3O       deriving (Show, Generic, GStorable, NFData)
-data C5O = C5O Int32 C2O C4O         deriving (Show, Generic, GStorable, NFData)
+data C1O = C1O Int32                 deriving (Show, Generic, NFData)
+                                     deriving (Storable) via Generically C1O
+data C2O = C2O Int8 Int32 Int16      deriving (Show, Generic, NFData)
+                                     deriving (Storable) via Generically C2O
+data C3O = C3O C2O Int64 C1O         deriving (Show, Generic, NFData)
+                                     deriving (Storable) via Generically C3O
+data C4O = C4O Double Int8 C3O       deriving (Show, Generic, NFData)
+                                     deriving (Storable) via Generically C4O
+data C5O = C5O Int32 C2O C4O         deriving (Show, Generic, NFData)
+                                     deriving (Storable) via Generically C5O
 c1o_def = C1O 3
 c2o_def = C2O 3 10 8
 c3o_def = C3O c2o_def 11000 c1o_def

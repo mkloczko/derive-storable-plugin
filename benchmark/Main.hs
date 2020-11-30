@@ -139,8 +139,8 @@ singularTests =
 #endif
            ]
        , bgroup "Optimized" $
-           [ env (malloc @C1O ) $ \ptr -> bench "C1" $ nfIO ((gpeekByteOff ptr 0) :: IO C1O)
-           , env (malloc @C2O ) $ \ptr -> bench "C2" $ nfIO ((gpeekByteOff ptr 0) :: IO C2O)
+           [ env (malloc @C1O ) $ \ptr -> bench "C1" $ nfIO ((peekByteOff ptr 0) :: IO C1O)
+           , env (malloc @C2O ) $ \ptr -> bench "C2" $ nfIO ((peekByteOff ptr 0) :: IO C2O)
            , env (malloc @C3O ) $ \ptr -> bench "C3" $ nfIO (peek ptr)
            , env (malloc @C4O ) $ \ptr -> bench "C4" $ nfIO (peek ptr)
            , env (malloc @C5O ) $ \ptr -> bench "C5" $ nfIO (peek ptr)

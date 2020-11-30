@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, CPP #-}
+{-# LANGUAGE DeriveGeneric, DeriveAnyClass, DerivingStrategies, DerivingVia, CPP #-}
 module TestCases where 
 
 import GHC.Generics (Generic)
@@ -8,11 +8,20 @@ import Data.Word
 import Control.DeepSeq
 
 
-data C1 = C1 Int32                 deriving (Show, Generic, GStorable, NFData)
-data C2 = C2 Int8 Int32 Int16      deriving (Show, Generic, GStorable, NFData)
-data C3 = C3 C2 Int64 C1           deriving (Show, Generic, GStorable, NFData)
-data C4 = C4 Double Int8 C3        deriving (Show, Generic, GStorable, NFData)
-data C5 = C5 Int32 C2 C4           deriving (Show, Generic, GStorable, NFData)
+data C1 = C1 Int32                 deriving (Show, Generic, NFData)
+                                   deriving (Storable) via Generically C1
+
+data C2 = C2 Int8 Int32 Int16      deriving (Show, Generic, NFData)
+                                   deriving (Storable) via Generically C2
+
+data C3 = C3 C2 Int64 C1           deriving (Show, Generic, NFData)
+                                   deriving (Storable) via Generically C3
+
+data C4 = C4 Double Int8 C3        deriving (Show, Generic, NFData)
+                                   deriving (Storable) via Generically C4
+
+data C5 = C5 Int32 C2 C4           deriving (Show, Generic, NFData)
+                                   deriving (Storable) via Generically C5
 
 c1_def = C1 3
 c2_def = C2 3 10 8
