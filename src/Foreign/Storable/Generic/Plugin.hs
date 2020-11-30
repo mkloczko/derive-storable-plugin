@@ -15,6 +15,7 @@ How to enable:
     * add @\{\-\# OPTIONS_GHC -fplugin Foreign.Storable.Generic.Plugin \#\-\}@ to the compiled module.
 
 -}
+{-# LANGUAGE CPP #-}
 module Foreign.Storable.Generic.Plugin (plugin) where
 
 import GhcPlugins
@@ -32,7 +33,9 @@ import Foreign.Storable.Generic.Plugin.Internal.Error
 plugin :: Plugin
 plugin = defaultPlugin {
   installCoreToDos = install,
+#if MIN_VERSION_GLASGOW_HASKELL(8,6,1,0)
   pluginRecompile = \_ -> pure NoForceRecompile
+#endif
   }
 
 defFlags = Flags Some False
