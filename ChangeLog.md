@@ -1,6 +1,10 @@
 # Revision history for generic-storable-plugin
 
-## 0.2.3.0  -- 2020-03-23
+## 0.2.3.2  -- 2020-12-04
+
+* Compiler marked as pure.
+
+## 0.2.3.1  -- 2020-11-28
 
 * Support for derive-storable 0.3.0.0
 

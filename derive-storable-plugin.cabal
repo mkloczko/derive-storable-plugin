@@ -2,7 +2,7 @@
 -- further documentation, see http://haskell.org/cabal/users-guide/
 
 name:                derive-storable-plugin
-version:             0.2.3.1
+version:             0.2.3.2
 synopsis:            GHC core plugin supporting the derive-storable package.
 description:         The package helps derive-storable package in forcing compile time evaluation of
                      sizes, alignments and offsets.
@@ -16,7 +16,7 @@ category:            Foreign
 build-type:          Simple
 extra-source-files:  ChangeLog.md README.md
 cabal-version:       >=1.10
-tested-with:         GHC==8.0.2, GHC==8.2.2, GHC==8.4.2, GHC==8.6.5, GHC==8.8.1, GHC==8.10.2
+tested-with:         GHC==8.2.2, GHC==8.4.2, GHC==8.6.5, GHC==8.8.1, GHC==8.10.2
 
 Flag sumtypes
   Description:   Use sumtypes within benchmark and tests.
@@ -32,7 +32,7 @@ library
                        , Foreign.Storable.Generic.Plugin.Internal.Predicates
                        , Foreign.Storable.Generic.Plugin.Internal.Types
   other-extensions:    DeriveGeneric, DeriveAnyClass, PatternGuards
-  build-depends:       base >=4.9 && <5, ghc >= 8.0 && < 8.12, ghci >= 8.0 && < 8.12, derive-storable >= 0.3 && < 0.4
+  build-depends:       base >=4.10 && <5, ghc >= 8.2 && < 8.12, ghci >= 8.2 && < 8.12, derive-storable >= 0.3 && < 0.4
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -42,7 +42,7 @@ benchmark plugin-benchmark
   default-language:    Haskell2010
   other-modules:       TestCases, TestCasesOptimized
   Main-is:             Main.hs
-  build-depends:       base >= 4.9 && < 5, deepseq, criterion >= 1.1.0
+  build-depends:       base >= 4.10 && < 5, deepseq, criterion >= 1.1.0
                     ,  derive-storable, derive-storable-plugin
 
   if flag(sumtypes)
@@ -55,9 +55,9 @@ test-suite c_alignment
   c-sources:           test/Basic/cbits/TestCases.c 
   main-is:             MemoryCSpec.hs
   other-modules:       TestCases 
-  build-depends:       base >= 4.8 && < 5, derive-storable, derive-storable-plugin
+  build-depends:       base >= 4.10 && < 5, derive-storable, derive-storable-plugin
                      , hspec >= 2.4, QuickCheck >= 2.10
-                     , ghc >= 8.0 && < 8.12, ghci >= 8.0 && < 8.12
+                     , ghc >= 8.2 && < 8.12, ghci >= 8.2 && < 8.12
   
   default-language:    Haskell2010
   if flag(sumtypes)
