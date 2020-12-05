@@ -32,9 +32,9 @@ import Foreign.Storable.Generic.Plugin.Internal.Error
 -- | The plugin itself.
 plugin :: Plugin
 plugin = defaultPlugin {
-  installCoreToDos = install,
+    installCoreToDos = install
 #if MIN_VERSION_GLASGOW_HASKELL(8,6,1,0)
-  pluginRecompile = \_ -> pure NoForceRecompile
+  , pluginRecompile = \_ -> pure NoForceRecompile
 #endif
   }
 

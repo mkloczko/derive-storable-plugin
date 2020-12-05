@@ -1,5 +1,9 @@
 # Revision history for generic-storable-plugin
 
+## 0.2.3.3  -- 2020-12-05
+
+* Put a comma in a wrong place.
+
 ## 0.2.3.2  -- 2020-12-04
 
 * Compiler marked as pure.
