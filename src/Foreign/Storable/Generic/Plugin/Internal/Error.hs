@@ -9,6 +9,7 @@ Portability : GHC-only
 Contains the Error datatype and related pretty print functions.  
 
 -}
+{-# LANGUAGE CPP #-}
 module Foreign.Storable.Generic.Plugin.Internal.Error 
     ( Verbosity(..)
     , CrashOnWarning(..)
@@ -18,11 +19,19 @@ module Foreign.Storable.Generic.Plugin.Internal.Error
     , stringToPpr
     ) where
 
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Types.Id  (Id)
+import GHC.Types.Var (Var(..))
+import GHC.Core (CoreBind(..), Bind(..),CoreExpr(..))
+import GHC.Core.Type (Type)
+import GHC.Utils.Outputable
+#else
 import Id (Id)
 import Var(Var(..))
 import CoreSyn (CoreBind(..), Bind(..),CoreExpr(..))
 import Type (Type)
 import Outputable
+#endif
 
 import Foreign.Storable.Generic.Plugin.Internal.Helpers
 

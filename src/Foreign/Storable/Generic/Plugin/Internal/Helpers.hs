@@ -12,44 +12,69 @@ Various helping functions.
 {-#LANGUAGE CPP#-}
 module Foreign.Storable.Generic.Plugin.Internal.Helpers where
 
--- Management of Core.
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Core          (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
+import GHC.Types.Literal (Literal(..))
+import GHC.Types.Id      (isLocalId, isGlobalId,Id)
+import GHC.Types.Var             (Var(..))
+import GHC.Types.Name            (getOccName,mkOccName)
+import GHC.Types.Name.Occurrence (OccName(..), occNameString)
+import qualified GHC.Types.Name as N (varName)
+import GHC.Types.SrcLoc (noSrcSpan)
+import GHC.Types.Unique (getUnique)
+import GHC.Driver.Main (hscCompileCoreExpr, getHscEnv)
+import GHC.Driver.Types (HscEnv,ModGuts(..))
+import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
+import GHC.Types.Basic (CompilerPhase(..))
+import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
+import GHC.Core.TyCon (algTyConRhs, visibleDataCons)
+import GHC.Builtin.Types   (intDataCon)
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.Make       (mkWildValBinder)
+import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
+import GHC.Core.Opt.Monad (putMsg, putMsgS)
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
 import Var (Var(..))
-#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
-import Var (TyVarBinder(..), VarBndr(..))
-#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
-import Var (TyVarBndr(..), TyVarBinder)
-#endif
 import Name (getOccName,mkOccName)
 import OccName (OccName(..), occNameString)
 import qualified Name as N (varName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
 import CoreMonad (CoreM,CoreToDo(..), getHscEnv)
 import BasicTypes (CompilerPhase(..))
--- Haskell types 
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (algTyConRhs, visibleDataCons)
-#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
-import TyCoRep (Type(..), TyBinder(..), TyCoBinder(..))
-#else 
-import TyCoRep (Type(..), TyBinder(..))
-#endif
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
-
 import MkCore (mkWildValBinder)
--- Printing
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import CoreMonad (putMsg, putMsgS)
+#endif
+
+
 
 -- Used to get to compiled values
 import GHCi.RemoteTypes
+
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
+import GHC.Types.Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+import Var (TyVarBinder(..), VarBndr(..))
+import TyCoRep (Type(..), TyBinder(..), TyCoBinder(..))
+import Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+import Var (TyVarBndr(..), TyVarBinder)
+import TyCoRep (Type(..), TyBinder(..))
+import Var
+#endif
 
 
 
@@ -60,7 +85,6 @@ import Data.Maybe
 import Data.Either
 import Control.Monad.IO.Class
 
-import Var
 
 
 -- | Get ids from core bind.
@@ -123,7 +147,9 @@ eqTyBind (Named tvb1) (Named tvb2) = tvb1 `eqTyVarBind` tvb2
 #else
 eqTyBind (Named t1 vis1) (Named t2 vis2) = t1 == t2 && vis1 == vis2
 #endif
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+eqTyBind (Anon _ t1) (Anon _ t2) = scaledThing t1 `eqType` scaledThing t2
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
 eqTyBind (Anon _ t1) (Anon _ t2) = t1 `eqType` t2
 #else
 eqTyBind (Anon   t1) (Anon   t2) = t1 `eqType` t2
@@ -156,7 +182,9 @@ isProxy (Anon t) = False
 isProxy (Named tycovar flag)
 #endif
     | isTyCoVar tycovar
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    , FunTy _ _ bool star <- varType tycovar
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _ bool star <- varType tycovar
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy bool star <- varType tycovar
@@ -171,7 +199,9 @@ removeProxy :: Type -> Type
 removeProxy t
     -- forall (proxy :: Bool -> *)
     | ForAllTy fall t1 <- t
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    , FunTy _ _ ch   t2 <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _  ch   t2 <- t1
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy    ch   t2 <- t1
@@ -186,7 +216,9 @@ removeProxy t
     -- forall (proxy :: Bool -> *) b.
     | ForAllTy fall f2 <- t
     , ForAllTy b    t1 <- f2
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    , FunTy _ _ ch   t2 <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _  ch   t2 <- t1
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy    ch   t2 <- t1
@@ -201,7 +233,9 @@ removeProxy t
     -- forall b (proxy :: Bool -> *).
     | ForAllTy b    f2 <- t
     , ForAllTy fall t1 <- f2
-#if   MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    , FunTy _ _ ch   t2 <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _  ch   t2 <- t1
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy    ch   t2 <- t1

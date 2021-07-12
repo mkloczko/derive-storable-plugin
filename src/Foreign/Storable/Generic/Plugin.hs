@@ -18,7 +18,12 @@ How to enable:
 {-# LANGUAGE CPP #-}
 module Foreign.Storable.Generic.Plugin (plugin) where
 
+
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Plugins
+#else
 import GhcPlugins
+#endif
 
 import Data.Maybe
 

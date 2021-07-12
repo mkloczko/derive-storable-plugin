@@ -8,6 +8,7 @@ Portability : GHC-only
 
 Grouping methods, both for types and core bindings.
 -}
+{-# LANGUAGE CPP #-}
 module Foreign.Storable.Generic.Plugin.Internal.GroupTypes 
     (
     -- Type ordering
@@ -19,7 +20,30 @@ module Foreign.Storable.Generic.Plugin.Internal.GroupTypes
     )
 where
 
--- Management of Core.
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Core          (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
+import GHC.Types.Literal (Literal(..))
+import GHC.Types.Id      (isLocalId, isGlobalId,Id)
+import GHC.Types.Var             (Var(..))
+import GHC.Types.Name            (getOccName,mkOccName)
+import GHC.Types.Name.Occurrence (OccName(..), occNameString)
+import qualified GHC.Types.Name as N (varName)
+import GHC.Types.SrcLoc (noSrcSpan)
+import GHC.Types.Unique (getUnique)
+import GHC.Driver.Main (hscCompileCoreExpr, getHscEnv)
+import GHC.Driver.Types (HscEnv,ModGuts(..))
+import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
+import GHC.Types.Basic (CompilerPhase(..))
+import GHC.Core.Type hiding (eqType)
+import GHC.Core.TyCon
+import GHC.Builtin.Types   (intDataCon)
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.Make       (mkWildValBinder)
+import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
+import GHC.Utils.Outputable (text, (<+>), ($$), nest)
+import GHC.Core.Opt.Monad (putMsg, putMsgS)
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
@@ -29,29 +53,39 @@ import OccName (OccName(..), occNameString)
 import qualified Name as N (varName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
 import CoreMonad (CoreM,CoreToDo(..), getHscEnv)
 import BasicTypes (CompilerPhase(..))
--- Haskell types 
-import Type (isAlgType, splitTyConApp_maybe)
-import TyCon (algTyConRhs, visibleDataCons)
-import TyCoRep (Type(..), TyBinder(..))
+import Type hiding (eqType)
+import TyCon 
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
-
 import MkCore (mkWildValBinder)
--- Printing
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import Outputable (text, (<+>), ($$), nest)
 import CoreMonad (putMsg, putMsgS)
+#endif
+
+
 
 -- Used to get to compiled values
 import GHCi.RemoteTypes
 
-import TyCon
-import Type hiding (eqType)
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
+import GHC.Types.Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+import Var (TyVarBinder(..), VarBndr(..))
+import TyCoRep (Type(..), TyBinder(..), TyCoBinder(..))
+import Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+import Var (TyVarBndr(..), TyVarBinder)
+import TyCoRep (Type(..), TyBinder(..))
+import Var
+#endif
 
 import Unsafe.Coerce
 
@@ -132,7 +166,11 @@ getDataConArgs t
     -- using ty_vars as keys.
     let type_scope = zip ty_vars ty_args
         data_cons  = concatMap dataConOrigArgTys $ (visibleDataCons.algTyConRhs) tc
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    map (substituteTyCon type_scope) (map scaledThing data_cons)  
+#else
     map (substituteTyCon type_scope) data_cons  
+#endif
     | otherwise = []
 
 
