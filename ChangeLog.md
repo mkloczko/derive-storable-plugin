@@ -1,5 +1,9 @@
 # Revision history for generic-storable-plugin
 
+## 0.2.3.3  -- 2021-07-12
+
+* Adding support for GHC 9.0.1
+
 ## 0.2.3.3  -- 2020-12-05
 
 * Put a comma in a wrong place.

@@ -9,6 +9,7 @@ Portability : GHC-only
 Contains methods for calculating type ordering and performing the compile-substitution optimisation.
 
 -}
+{-#LANGUAGE CPP #-}
 
 module Foreign.Storable.Generic.Plugin.Internal 
     ( groupTypes
@@ -18,37 +19,67 @@ where
 -- Management of Core.
 
 import Prelude hiding ((<>))
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Core          (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
+import GHC.Types.Literal (Literal(..))
+import GHC.Types.Id      (isLocalId, isGlobalId,Id, modifyInlinePragma, setInlinePragma, idInfo)
+import GHC.Types.Id.Info
+import GHC.Types.Var             (Var(..))
+import GHC.Types.Name            (getOccName,mkOccName)
+import GHC.Types.Name.Occurrence (OccName(..), occNameString)
+import qualified GHC.Types.Name as N (varName)
+import GHC.Types.SrcLoc (noSrcSpan)
+import GHC.Types.Unique (getUnique)
+import GHC.Driver.Main (hscCompileCoreExpr, getHscEnv)
+import GHC.Driver.Types (HscEnv,ModGuts(..))
+import GHC.Core.Opt.Monad
+    (CoreM, CoreToDo(..), 
+     getHscEnv, getDynFlags, putMsg, putMsgS)
+import GHC.Types.Basic (CompilerPhase(..))
+import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
+import GHC.Core.TyCon (tyConKind, algTyConRhs, visibleDataCons)
+import GHC.Core.TyCo.Rep (Type(..), TyBinder(..))
+import GHC.Builtin.Types   (intDataCon)
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.Make       (mkWildValBinder)
+import GHC.Utils.Outputable 
+    (cat, ppr, SDoc, showSDocUnsafe, showSDoc, 
+     ($$), ($+$), hsep, vcat, empty,text, 
+     (<>), (<+>), nest, int, colon,hcat, comma, 
+     punctuate, fsep) 
+import GHC.Core.Opt.Monad (putMsg, putMsgS)
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id, modifyInlinePragma, setInlinePragma, idInfo)
-import IdInfo 
+import IdInfo
 import Var (Var(..))
 import Name (getOccName,mkOccName)
 import OccName (OccName(..), occNameString)
 import qualified Name as N (varName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
 import CoreMonad 
     (CoreM, CoreToDo(..), 
      getHscEnv, getDynFlags, putMsg, putMsgS)
 import BasicTypes (CompilerPhase(..))
--- Haskell types 
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (tyConKind, algTyConRhs, visibleDataCons)
 import TyCoRep (Type(..), TyBinder(..))
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
-
 import MkCore (mkWildValBinder)
--- Printing
 import Outputable 
     (cat, ppr, SDoc, showSDocUnsafe, showSDoc, 
      ($$), ($+$), hsep, vcat, empty,text, 
      (<>), (<+>), nest, int, colon,hcat, comma, 
      punctuate, fsep) 
+import CoreMonad (putMsg, putMsgS)
+#endif
+
 
 
 import Data.List

@@ -39,48 +39,117 @@ module Foreign.Storable.Generic.Plugin.Internal.Compile
 
 where
 
--- Management of Core.
 import Prelude hiding ((<>))
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Core (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt, AltCon(..), isId, Unfolding(..))
+import GHC.Types.Literal (Literal(..))
+import GHC.Types.Id      (isLocalId, isGlobalId,setIdInfo, Id)
+import GHC.Types.Id.Info (IdInfo(..))
+import GHC.Types.Var             (Var(..))
+import GHC.Types.Name            (getOccName,mkOccName,getSrcSpan)
+import GHC.Types.Name.Occurrence (OccName(..), occNameString)
+import qualified GHC.Types.Name as N (varName)
+import GHC.Types.SrcLoc (noSrcSpan,SrcSpan)
+import GHC.Types.Unique (getUnique)
+import GHC.Driver.Main (hscCompileCoreExpr)
+import GHC.Driver.Types (HscEnv,ModGuts(..))
+import GHC.Core.Opt.Monad (CoreM,CoreToDo(..),getHscEnv,getDynFlags)
+import GHC.Core.Lint (lintExpr)
+import GHC.Types.Basic (CompilerPhase(..), Boxity(..))
+import GHC.Core.Type
+import GHC.Core.TyCon (algTyConRhs, visibleDataCons)
+import GHC.Builtin.Types   
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.Make       (mkWildValBinder)
+import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
+import GHC.Utils.Outputable (Outputable(..),($$), ($+$), vcat, empty,text, (<>), (<+>), nest, int, comma) 
+import GHC.Core.Opt.Monad (putMsg, putMsgS)
+import GHC.Builtin.Names  (buildIdKey, augmentIdKey)
+import GHC.Builtin.Types.Prim (intPrimTy)
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt, AltCon(..), isId, Unfolding(..))
 import Literal (Literal(..))
-#if MIN_VERSION_GLASGOW_HASKELL(8,6,0,0)
-import Literal (LitNumType(..))
-#endif
-import Id  (isLocalId, isGlobalId,setIdInfo,Id)
+import Id  (isLocalId, isGlobalId,setIdInfo, Id)
 import IdInfo (IdInfo(..))
-import Var (Var(..), idInfo)
-import Name (getOccName,mkOccName, getSrcSpan)
+import Var (Var(..))
+import Name (getOccName,mkOccName,getSrcSpan)
 import OccName (OccName(..), occNameString)
-import qualified Name as N (varName, tvName, tcClsName)
-import SrcLoc (noSrcSpan, SrcSpan)
+import qualified Name as N (varName)
+import SrcLoc (noSrcSpan,SrcSpan)
 import Unique (getUnique)
--- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
 import CoreMonad (CoreM,CoreToDo(..), getHscEnv, getDynFlags)
 import CoreLint (lintExpr)
-import BasicTypes (CompilerPhase(..))
--- Haskell types 
+import BasicTypes (CompilerPhase(..), Boxity(..))
 import Type (isAlgType, splitTyConApp_maybe)
-import TyCon (tyConName, algTyConRhs, visibleDataCons)
-import TyCoRep (Type(..), TyBinder(..), TyLit(..))
-import TysWiredIn
-import TysPrim (intPrimTy)
+import TyCon (algTyConRhs, visibleDataCons)
+import TysWiredIn 
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
-
 import MkCore (mkWildValBinder)
--- Printing
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import Outputable (Outputable(..),($$), ($+$), vcat, empty,text, (<>), (<+>), nest, int, comma) 
 import CoreMonad (putMsg, putMsgS)
+import PrelNames (buildIdKey, augmentIdKey)
+import TysPrim (intPrimTy)
+#endif
+
+
 
 -- Used to get to compiled values
 import GHCi.RemoteTypes
 
--- Used to create types
-import PrelNames (buildIdKey, augmentIdKey)
-import DataCon (dataConWorkId)
-import BasicTypes (Boxity(..))
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
+import GHC.Types.Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+import Var (TyVarBinder(..), VarBndr(..))
+import TyCoRep (Type(..), TyBinder(..), TyCoBinder(..))
+import Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+import Var (TyVarBndr(..), TyVarBinder)
+import TyCoRep (Type(..), TyBinder(..))
+import Var
+#endif
+
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Types.Literal (LitNumType(..))
+#elif MIN_VERSION_GLASGOW_HASKELL(8,6,0,0)
+import Literal (LitNumType(..))
+#endif
+
+-- Management of Core.
+-- import Prelude hiding ((<>))
+-- import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt, AltCon(..), isId, Unfolding(..))
+-- import Literal (Literal(..))
+-- #if MIN_VERSION_GLASGOW_HASKELL(8,6,0,0)
+-- import Literal (LitNumType(..))
+-- #endif
+-- import Id  (isLocalId, isGlobalId,setIdInfo,Id)
+-- import IdInfo (IdInfo(..))
+-- import Var (Var(..), idInfo)
+-- import Name (getOccName,mkOccName, getSrcSpan)
+-- import OccName (OccName(..), occNameString)
+-- import qualified Name as N (varName, tvName, tcClsName)
+-- import SrcLoc (noSrcSpan, SrcSpan)
+-- import Unique (getUnique)
+-- -- Compilation pipeline stuff
+-- import HscMain (hscCompileCoreExpr)
+-- import HscTypes (HscEnv,ModGuts(..))
+-- import CoreMonad (CoreM,CoreToDo(..), getHscEnv, getDynFlags)
+-- import CoreLint (lintExpr)
+-- import BasicTypes (CompilerPhase(..))
+-- -- Haskell types 
+-- import Type (isAlgType, splitTyConApp_maybe)
+-- import TyCon (tyConName, algTyConRhs, visibleDataCons)
+-- import TyCoRep (Type(..), TyBinder(..), TyLit(..))
+-- import TysWiredIn
+-- import TysPrim (intPrimTy)
+-- import DataCon    (dataConWorkId,dataConOrigArgTys) 
+
 
 import Unsafe.Coerce
 
@@ -128,7 +197,9 @@ tryCompileExpr id core_expr  = do
 
 -- | A small helper - create an integer literal.
 intLiteral :: (Integral a) => a -> CoreExpr
-#if MIN_VERSION_GLASGOW_HASKELL(8,6,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+intLiteral i =  Lit $ LitNumber LitNumInt (fromIntegral i)
+#elif MIN_VERSION_GLASGOW_HASKELL(8,6,0,0)
 intLiteral i =  Lit $ LitNumber LitNumInt (fromIntegral i) intPrimTy
 #else
 intLiteral i = Lit $ MachInt $ fromIntegral i
@@ -140,7 +211,11 @@ intToExpr t i = Lam wild $ App fun arg
     where fun = Var $ dataConWorkId intDataCon
           -- arg = Lit $ MachInt $ fromIntegral i
           arg = intLiteral i
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+          wild= mkWildValBinder Many t 
+#else
           wild= mkWildValBinder t 
+#endif
 
 -- | For gsizeOf and galignment - calculate the variables.
 intSubstitution :: CoreBind -> CoreM (Either Error CoreBind)

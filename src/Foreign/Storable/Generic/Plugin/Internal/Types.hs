@@ -37,42 +37,54 @@ module Foreign.Storable.Generic.Plugin.Internal.Types
     )
     where
 
--- Management of Core.
+
+
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Core          (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
+import GHC.Types.Literal (Literal(..))
+import GHC.Types.Id      (isLocalId, isGlobalId,Id)
+import GHC.Types.Var             (Var(..))
+import GHC.Types.Name            (getOccName,mkOccName)
+import GHC.Types.Name.Occurrence (OccName(..), occNameString)
+import qualified GHC.Types.Name as N (varName, tcClsName)
+import GHC.Types.SrcLoc (noSrcSpan)
+import GHC.Types.Unique (getUnique)
+import GHC.Driver.Main (hscCompileCoreExpr, getHscEnv)
+import GHC.Driver.Types (HscEnv,ModGuts(..))
+import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
+import GHC.Types.Basic (CompilerPhase(..))
+import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
+import GHC.Core.TyCon (TyCon(..),algTyConRhs, visibleDataCons)
+import GHC.Builtin.Types   (intDataCon)
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.Make       (mkWildValBinder)
+import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
+import GHC.Core.Opt.Monad (putMsg, putMsgS)
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
-import Var (Var(..), isId)
-#if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
-import Var (TyVarBinder, VarBndr(..), binderVar)
-#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
-import Var (TyVarBndr(..), TyVarBinder, binderVar)
-#endif
+import Var (Var(..))
 import Name (getOccName,mkOccName)
 import OccName (OccName(..), occNameString)
-import qualified Name as N (varName,tcClsName)
+import qualified Name as N (varName, tcClsName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
-import CoreMonad (CoreM, CoreToDo(..), getHscEnv)
+import CoreMonad (CoreM,CoreToDo(..), getHscEnv)
 import BasicTypes (CompilerPhase(..))
--- Haskell types 
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (TyCon(..),algTyConRhs, visibleDataCons)
-import TyCoRep (Type(..), TyBinder(..))
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
-
 import MkCore (mkWildValBinder)
--- Printing
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import CoreMonad (putMsg, putMsgS)
+#endif
 
--- Used to get to compiled values
 import GHCi.RemoteTypes
-
-
 
 import Unsafe.Coerce
 
@@ -88,11 +100,32 @@ import Foreign.Storable.Generic.Plugin.Internal.Helpers
 
 
 -- Function for getting types from an id.
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Core.TyCon      (isUnboxedTupleTyCon)
+import GHC.Builtin.Types (intTyCon, constraintKind, constraintKindTyCon, listTyCon, intTy)
+import GHC.Builtin.Names  (ioTyConKey, ptrTyConKey, realWorldTyConKey, statePrimTyConKey)
+import GHC.Core.Type       (isUnboxedTupleType)
+#else
 import TyCon      (isUnboxedTupleTyCon)
 import TysWiredIn (intTyCon, constraintKind, constraintKindTyCon, listTyCon, intTy)
 import PrelNames  (ioTyConKey, ptrTyConKey, realWorldTyConKey, statePrimTyConKey)
 import Type       (isUnboxedTupleType)
+#endif
 
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
+import GHC.Types.Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+import Var (TyVarBinder(..), VarBndr(..))
+import TyCoRep (Type(..), TyBinder(..), TyCoBinder(..))
+import Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+import Var (TyVarBndr(..), TyVarBinder)
+import TyCoRep (Type(..), TyBinder(..))
+import Var
+#endif
 
 -- | Check whether the type is integer
 isIntType :: Type -> Bool
@@ -185,7 +218,12 @@ getAlignmentType :: Type -> Maybe Type
 getAlignmentType t
     -- Assuming there are no anonymous ty bind between
     -- the type and the integer, ie no : Type -> forall a. Int
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    | FunTy _ _ t1 t2 <- t
+    -- , isIntType t2
+    , TyConApp _ _ <- t2
+    , the_t <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     | FunTy _ t1 t2 <- t
     -- , isIntType t2
     , TyConApp _ _ <- t2
@@ -208,7 +246,12 @@ getSizeType :: Type -> Maybe Type
 getSizeType t
     -- Assuming there are no anonymous ty bind between
     -- the type and the integer, ie no : Type -> forall a. Int
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    | FunTy _ _ t1 t2 <- t
+    -- , isIntType t2
+    , TyConApp _ _ <- t2
+    , the_t <- t1
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     | FunTy _ t1 t2 <- t
     -- , isIntType t2
     , TyConApp _ _ <- t2
@@ -247,7 +290,9 @@ getPeekType' t after_ptr after_int
     = Just the_t
     -- Int -> IO (TheType)
     | after_ptr
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    , FunTy _ _ int_t io_t <- t
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _ int_t io_t <- t
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy int_t io_t <- t
@@ -258,7 +303,10 @@ getPeekType' t after_ptr after_int
     , isIntType int_t
     = getPeekType' io_t True True
     -- Ptr b -> Int -> IO (TheType)
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    | ForAllTy ty_bind fun_t <- t
+    , FunTy _ _ ptr_t rest <- fun_t 
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     | ForAllTy ty_bind fun_t <- t
     , FunTy _ ptr_t rest <- fun_t 
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
@@ -292,7 +340,10 @@ getPokeType' :: Type
 getPokeType' t after_ptr after_int 
     -- Last step: TheType -> IO ()
     | after_ptr, after_int
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    , FunTy _ _ the_t io_t <- t
+    , isIOType io_t
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _ the_t io_t <- t
     , isIOType io_t
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
@@ -306,7 +357,9 @@ getPokeType' t after_ptr after_int
     = Just the_t
     -- Int -> TheType -> IO ()
     | after_ptr
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9, 0,1,0)
+    , FunTy _ _ int_t rest <- t
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     , FunTy _ int_t rest <- t
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy int_t rest <- t
@@ -317,7 +370,10 @@ getPokeType' t after_ptr after_int
     , isIntType int_t
     = getPokeType' rest True True
     -- Ptr b -> Int -> TheType -> IO ()
-#if MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
+#if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+    | ForAllTy ty_bind fun_t <- t
+    , FunTy _ _ ptr_t rest <- fun_t
+#elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     | ForAllTy ty_bind fun_t <- t
     , FunTy _ ptr_t rest <- fun_t
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)

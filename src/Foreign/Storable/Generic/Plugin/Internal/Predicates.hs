@@ -38,35 +38,92 @@ module Foreign.Storable.Generic.Plugin.Internal.Predicates
     )
 where
 
--- Management of Core.
+-- -- Management of Core.
+-- import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
+-- import Literal (Literal(..))
+-- import Id  (isLocalId, isGlobalId,Id)
+-- import Var (Var(..))
+-- import Name (getOccName,mkOccName)
+-- import OccName (OccName(..), occNameString)
+-- import qualified Name as N (varName, tcClsName)
+-- import SrcLoc (noSrcSpan)
+-- import Unique (getUnique)
+-- -- Compilation pipeline stuff
+-- import HscMain (hscCompileCoreExpr)
+-- import HscTypes (HscEnv,ModGuts(..))
+-- import CoreMonad (CoreM, CoreToDo(..), getHscEnv)
+-- import BasicTypes (CompilerPhase(..))
+-- -- Types 
+-- import Type (isAlgType, splitTyConApp_maybe)
+-- import TyCon (TyCon,tyConName, algTyConRhs, visibleDataCons)
+-- import TyCoRep (Type(..), TyBinder(..))
+-- import TysWiredIn (intDataCon)
+-- import DataCon    (dataConWorkId,dataConOrigArgTys) 
+-- 
+-- import MkCore (mkWildValBinder)
+-- -- Printing
+-- import Outputable (cat, ppr, SDoc, showSDocUnsafe)
+-- import CoreMonad (putMsg, putMsgS)
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Core          (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
+import GHC.Types.Literal (Literal(..))
+import GHC.Types.Id      (isLocalId, isGlobalId,Id)
+import GHC.Types.Var             (Var(..))
+import GHC.Types.Name            (getOccName,mkOccName)
+import GHC.Types.Name.Occurrence (OccName(..), occNameString)
+import qualified GHC.Types.Name as N (varName)
+import GHC.Types.SrcLoc (noSrcSpan)
+import GHC.Types.Unique (getUnique)
+import GHC.Driver.Main (hscCompileCoreExpr, getHscEnv)
+import GHC.Driver.Types (HscEnv,ModGuts(..))
+import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
+import GHC.Types.Basic (CompilerPhase(..))
+import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
+import GHC.Core.TyCon (algTyConRhs, visibleDataCons)
+import GHC.Builtin.Types   (intDataCon)
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.Make       (mkWildValBinder)
+import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
+import GHC.Core.Opt.Monad (putMsg, putMsgS)
+import GHC.Types.Name (nameStableString)
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,Id)
 import Var (Var(..))
 import Name (getOccName,mkOccName)
 import OccName (OccName(..), occNameString)
-import qualified Name as N (varName, tcClsName)
+import qualified Name as N (varName)
 import SrcLoc (noSrcSpan)
 import Unique (getUnique)
--- Compilation pipeline stuff
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
-import CoreMonad (CoreM, CoreToDo(..), getHscEnv)
+import CoreMonad (CoreM,CoreToDo(..), getHscEnv)
 import BasicTypes (CompilerPhase(..))
--- Types 
 import Type (isAlgType, splitTyConApp_maybe)
-import TyCon (TyCon,tyConName, algTyConRhs, visibleDataCons)
-import TyCoRep (Type(..), TyBinder(..))
+import TyCon (algTyConRhs, visibleDataCons)
 import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
-
 import MkCore (mkWildValBinder)
--- Printing
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import CoreMonad (putMsg, putMsgS)
-
-
 import Name (nameStableString)
+#endif
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
+import GHC.Types.Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
+import Var (TyVarBinder(..), VarBndr(..))
+import TyCoRep (Type(..), TyBinder(..), TyCoBinder(..))
+import Var
+#elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
+import Var (TyVarBndr(..), TyVarBinder)
+import TyCoRep (Type(..), TyBinder(..))
+import Var
+#endif
 
 import Data.Maybe 
 
