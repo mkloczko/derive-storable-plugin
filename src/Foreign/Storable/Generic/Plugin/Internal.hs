@@ -32,7 +32,12 @@ import qualified GHC.Types.Name as N (varName)
 import GHC.Types.SrcLoc (noSrcSpan)
 import GHC.Types.Unique (getUnique)
 import GHC.Driver.Main (hscCompileCoreExpr, getHscEnv)
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+import GHC.Driver.Env.Types (HscEnv)
+import GHC.Unit.Module.ModGuts (ModGuts(..))
+#else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
+#endif
 import GHC.Core.Opt.Monad
     (CoreM, CoreToDo(..), 
      getHscEnv, getDynFlags, putMsg, putMsgS)
@@ -44,7 +49,7 @@ import GHC.Builtin.Types   (intDataCon)
 import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
 import GHC.Core.Make       (mkWildValBinder)
 import GHC.Utils.Outputable 
-    (cat, ppr, SDoc, showSDocUnsafe, showSDoc, 
+    (cat, ppr, SDoc, showSDocUnsafe,
      ($$), ($+$), hsep, vcat, empty,text, 
      (<>), (<+>), nest, int, colon,hcat, comma, 
      punctuate, fsep) 
@@ -73,7 +78,7 @@ import TysWiredIn (intDataCon)
 import DataCon    (dataConWorkId,dataConOrigArgTys) 
 import MkCore (mkWildValBinder)
 import Outputable 
-    (cat, ppr, SDoc, showSDocUnsafe, showSDoc, 
+    (cat, ppr, SDoc, showSDocUnsafe,
      ($$), ($+$), hsep, vcat, empty,text, 
      (<>), (<+>), nest, int, colon,hcat, comma, 
      punctuate, fsep) 
@@ -225,7 +230,6 @@ foundBinds_info flags ids = do
             other ->    text "The following bindings are to be optimised:"
                     $+$ nest 4 txt
         print_binding id = ppr id
-        max_nest = maximum $ 0 : map (length.(showSDoc dyn_flags).ppr) ids
         -- Print groups of types
         printer the_groups = case the_groups of
             [] -> return ()

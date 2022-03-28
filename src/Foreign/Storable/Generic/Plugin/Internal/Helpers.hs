@@ -13,7 +13,7 @@ Various helping functions.
 module Foreign.Storable.Generic.Plugin.Internal.Helpers where
 
 #if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
-import GHC.Core          (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
+import GHC.Core          (Bind(..),Expr(..), CoreExpr, CoreBind, CoreBndr, CoreProgram, Alt(..))
 import GHC.Types.Literal (Literal(..))
 import GHC.Types.Id      (isLocalId, isGlobalId,Id)
 import GHC.Types.Var             (Var(..))
@@ -23,7 +23,12 @@ import qualified GHC.Types.Name as N (varName)
 import GHC.Types.SrcLoc (noSrcSpan)
 import GHC.Types.Unique (getUnique)
 import GHC.Driver.Main (hscCompileCoreExpr, getHscEnv)
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+import GHC.Driver.Env.Types (HscEnv)
+import GHC.Unit.Module.ModGuts (ModGuts(..))
+#else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
+#endif
 import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
 import GHC.Types.Basic (CompilerPhase(..))
 import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
@@ -104,15 +109,23 @@ getIdsExprsBind (Rec       recs) = recs
 
 -- | Get all IDs from CoreExpr
 getIdsExpr :: CoreExpr -> [Id]
-getIdsExpr (Var id)    = [id]
-getIdsExpr (App e1 e2) = concat [getIdsExpr e1, getIdsExpr e2]
-getIdsExpr (Lam id e)  = id : getIdsExpr e
+getIdsExpr (Var id)          = [id]
+getIdsExpr (App e1 e2)       = concat [getIdsExpr e1, getIdsExpr e2]
+getIdsExpr (Lam id e)        = id : getIdsExpr e
 -- Ids from bs are ignored, as they are supposed to appear in e argument.
-getIdsExpr (Let bs e)  = concat [getIdsExpr e, concatMap getIdsExpr (getExprsBind bs)]
+getIdsExpr (Let bs e)        = concat [getIdsExpr e, concatMap getIdsExpr (getExprsBind bs)]
 -- The case_binder is ignored - the evaluated expression might appear on the rhs of alts
-getIdsExpr (Case e _ _ alts) = concat $ getIdsExpr e : map (\(_,_,e_c) -> getIdsExpr e_c) alts
-getIdsExpr (Cast e _) = getIdsExpr e 
-getIdsExpr _           = []
+getIdsExpr (Case e _ _ alts) = concat $ getIdsExpr e : map extractAlt alts
+getIdsExpr (Cast e _)        = getIdsExpr e
+getIdsExpr _                 = []
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+extractAlt :: Alt CoreBndr -> [Id]
+extractAlt (Alt _ac _bs expr) = getIdsExpr expr
+#else
+extractAlt :: (a, b, CoreExpr) -> [Id]
+extractAlt (_, _, e_c) = getIdsExpr e_c
+#endif
 
 
 ------------
@@ -249,4 +262,3 @@ removeProxy t
     = ForAllTy b t2
     | otherwise
     = t
-

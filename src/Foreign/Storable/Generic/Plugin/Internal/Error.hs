@@ -45,13 +45,13 @@ type CrashOnWarning = Bool
 data Flags = Flags Verbosity CrashOnWarning
 
 -- | All possible errors.
-data Error = TypeNotFound Id                       -- ^ Could not obtain the type from the id.
-           | RecBinding CoreBind                   -- ^ The binding is recursive and won't be substituted.
-           | CompilationNotSupported CoreBind      -- ^ The compilation-substitution is not supported for the given binding.
-           | CompilationError        CoreBind SDoc -- ^ Error during compilation. The CoreBind is to be returned.
-           | OrderingFailedBinds Int [CoreBind]    -- ^ Ordering failed for core bindings.
-           | OrderingFailedTypes Int [Type]        -- ^ Ordering failed for types
-           | OtherError          SDoc              -- ^ Any other error.
+data Error = TypeNotFound Id                         -- ^ Could not obtain the type from the id.
+           | RecBinding CoreBind                     -- ^ The binding is recursive and won't be substituted.
+           | CompilationNotSupported CoreBind        -- ^ The compilation-substitution is not supported for the given binding.
+           | CompilationError        CoreBind [SDoc] -- ^ Error during compilation. The CoreBind is to be returned.
+           | OrderingFailedBinds Int [CoreBind]      -- ^ Ordering failed for core bindings.
+           | OrderingFailedTypes Int [Type]          -- ^ Ordering failed for types
+           | OtherError          SDoc                -- ^ Any other error.
 
 pprTypeNotFound :: Verbosity -> Id -> SDoc
 pprTypeNotFound None _  = empty 
@@ -141,7 +141,7 @@ pprError :: Verbosity -> Error -> SDoc
 pprError verb (TypeNotFound            id  ) = pprTypeNotFound verb id
 pprError verb (RecBinding              bind) = pprRecBinding   verb bind
 pprError verb (CompilationNotSupported bind) = pprCompilationNotSupported verb bind
-pprError verb (CompilationError    bind str) = pprCompilationError verb bind str
+pprError verb (CompilationError    bind str) = pprCompilationError verb bind $ vcat str
 pprError verb (OrderingFailedBinds d    bs) = pprOrderingFailedBinds verb d bs
 pprError verb (OrderingFailedTypes d    ts) = pprOrderingFailedTypes verb d ts
 pprError verb (OtherError          sdoc   ) = pprOtherError          verb sdoc

@@ -51,7 +51,12 @@ import qualified GHC.Types.Name as N (varName, tcClsName)
 import GHC.Types.SrcLoc (noSrcSpan)
 import GHC.Types.Unique (getUnique)
 import GHC.Driver.Main (hscCompileCoreExpr, getHscEnv)
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+import GHC.Driver.Env.Types (HscEnv)
+import GHC.Unit.Module.ModGuts (ModGuts(..))
+#else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
+#endif
 import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
 import GHC.Types.Basic (CompilerPhase(..))
 import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
