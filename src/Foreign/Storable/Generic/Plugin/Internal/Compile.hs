@@ -42,7 +42,7 @@ where
 import Prelude hiding ((<>))
 
 #if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
-import GHC.Core (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt, AltCon(..), isId, Unfolding(..))
+import GHC.Core (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt(..), AltCon(..), isId, Unfolding(..))
 import GHC.Types.Literal (Literal(..))
 import GHC.Types.Id      (isLocalId, isGlobalId,setIdInfo, Id)
 import GHC.Types.Id.Info (IdInfo(..))
@@ -53,7 +53,13 @@ import qualified GHC.Types.Name as N (varName)
 import GHC.Types.SrcLoc (noSrcSpan,SrcSpan)
 import GHC.Types.Unique (getUnique)
 import GHC.Driver.Main (hscCompileCoreExpr)
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+import GHC.Data.Bag (bagToList)
+import GHC.Driver.Env.Types (HscEnv)
+import GHC.Unit.Module.ModGuts (ModGuts(..))
+#else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
+#endif
 import GHC.Core.Opt.Monad (CoreM,CoreToDo(..),getHscEnv,getDynFlags)
 import GHC.Core.Lint (lintExpr)
 import GHC.Types.Basic (CompilerPhase(..), Boxity(..))
@@ -188,7 +194,7 @@ tryCompileExpr id core_expr  = do
     e_compiled <- liftIO $ try $ 
                     compileExpr hsc_env core_expr (getSrcSpan id) :: CoreM (Either SomeException a)
     case e_compiled of
-        Left  se  -> return $ Left $ CompilationError (NonRec id core_expr) (stringToPpr $ show se)
+        Left  se  -> return $ Left $ CompilationError (NonRec id core_expr) [stringToPpr $ show se]
         Right val-> return $ Right val
 
 ----------------------
@@ -232,7 +238,7 @@ intSubstitution b@(NonRec id (Lam l1 l@(Lam l2 e@(Lam l3 expr)))) = do
     case m_t of
         Just t ->  return $ NonRec id <$> (Lam l1 <$> (Lam l2 <$> (intToExpr t <$> the_integer)))
         Nothing -> 
-            return the_integer >> return $ Left $ CompilationError b (text "Type not found")
+            return the_integer >> return $ Left $ CompilationError b [text "Type not found"]
 -- Without GSTORABLE_SUMPTYPES
 intSubstitution b@(NonRec id (Lam l1 expr)) = do
     -- Get HscEnv
@@ -243,7 +249,7 @@ intSubstitution b@(NonRec id (Lam l1 expr)) = do
     case m_t of
         Just t ->  return $ NonRec id <$> (intToExpr t <$> the_integer)
         Nothing -> 
-            return the_integer >> return $ Left $ CompilationError b (text "Type not found")
+            return the_integer >> return $ Left $ CompilationError b [text "Type not found"]
 -- For GHC <= 8.6.5
 intSubstitution b@(NonRec id e@(App expr g)) = case expr of
      Lam _ (Lam _ (Lam _ e)) -> intSubstitution $ NonRec id expr
@@ -268,7 +274,7 @@ intSubstitutionWorker id expr = do
         Just t ->  return $ NonRec id <$> (intToExpr t <$> the_integer)
         -- If the compilation error occured, first return it.
         Nothing -> 
-            return the_integer >> return $ Left $ CompilationError (NonRec id expr) (text "Type not found")
+            return the_integer >> return $ Left $ CompilationError (NonRec id expr) [text "Type not found"]
 -----------------------
 -- peek substitution --
 -----------------------
@@ -281,10 +287,10 @@ offsetSubstitution b@(NonRec id expr) = do
     let ne_subs = case e_subs of
              -- Add the text from other error.
              Left (OtherError sdoc) 
-                 -> Left $ CompilationError b sdoc
+                 -> Left $ CompilationError b [sdoc]
              -- Add the information about uncompiled expr.
              Left err@(CompilationError _ _) 
-                 -> Left $ CompilationError b (pprError Some err)
+                 -> Left $ CompilationError b [pprError Some err]
              a   -> a
 
     return $ NonRec id <$> e_subs
@@ -307,8 +313,10 @@ getScopeExpr (IntPrimVal   _ expr) = expr
 instance Outputable OffsetScope where
     ppr (IntList    id expr) = ppr id <+> ppr (getUnique id) <+> comma <+> ppr expr
     ppr (IntPrimVal id expr) = ppr id <+> ppr (getUnique id) <+> comma <+> ppr expr
-    pprPrec _ el = ppr el
 
+#if !MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+    pprPrec _ el = ppr el
+#endif
 
 -- | Create a list expression from Haskell list.
 intListExpr :: [Int] -> CoreExpr
@@ -486,7 +494,11 @@ offsetSubstitutionTree scope expr
     -- Compile case_expr and put it in scope as x#
     -- case_expr is of format $w!! @Int offsets 0#
     | Case case_expr _ _ [alt0] <- expr
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+    , (Alt (DataAlt i_prim_con) [x_id] alt_expr) <- alt0
+#else
     , (DataAlt i_prim_con, [x_id], alt_expr) <- alt0
+#endif
     , i_prim_con == intDataCon
     , Just new_case_expr <- caseExprIndex scope case_expr
     = do 
@@ -498,13 +510,26 @@ offsetSubstitutionTree scope expr
     -- Normal case expressions. 
     | Case case_expr cb t alts <- expr
     = do
-        e_new_alts <- mapM (\(a, args, a_expr) -> (,,) a args <$> offsetSubstitutionTree scope a_expr) alts
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+        let mkAlt = Alt
+#else
+        let mkAlt = (,,)
+#endif
+
+        e_new_alts <- flip mapM alts $
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+          \(Alt a args a_expr) ->
+#else
+          \(a, args, a_expr) ->
+#endif
+            (,,) a args <$> offsetSubstitutionTree scope a_expr
+
         new_case_expr <- offsetSubstitutionTree scope case_expr
         -- Find the first error in alternative compilation
         let c_err = find (\(_,_,e) -> isLeft e) e_new_alts
         case c_err of
             Nothing -> return $ Case <$> new_case_expr 
-                <*> pure cb <*> pure t <*> pure [(a,b,ne) | (a,b,Right ne)  <- e_new_alts]
+                <*> pure cb <*> pure t <*> pure [mkAlt a b ne | (a,b,Right ne)  <- e_new_alts]
             Just (_,_,err) -> return err
     -- Variable. Return it or try to replace it.
     -- Must be here, otherwise other substitutions won't happen
@@ -566,14 +591,26 @@ lintBind :: CoreBind -- ^ Core binding to use when returning CompilationError
 lintBind b_old b@(NonRec id expr) = do
     dyn_flags <- getDynFlags
     case lintExpr dyn_flags [] expr of
-        Just sdoc -> (return $ Left $ CompilationError b_old sdoc)
-        Nothing   -> return $ Right b
+        Just sdoc -> do
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+            let err = bagToList sdoc
+#else
+            let err = [sdoc]
+#endif
+            return $ Left $ CompilationError b_old err
+        Nothing ->
+            return $ Right b
 lintBind b_old b@(Rec bs) = do
     dyn_flags <- getDynFlags
     let errs = mapMaybe (\(_,expr) -> lintExpr dyn_flags [] expr) bs
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+    let convert = foldMap bagToList
+#else
+    let convert = id
+#endif
     case errs of
         [] -> return $ Right b
-        _  -> return $ Left $ CompilationError b_old (vcat errs)
+        _  -> return $ Left $ CompilationError b_old (convert errs)
 
 -- | Substitutes the localIds inside the bindings with bodies of provided bindings.
 replaceIdsBind :: [CoreBind] -- ^ Replace with - for GStorable bindings
@@ -616,7 +653,11 @@ replaceIds gstorable_bs other_bs (Let  b e)  = Let (replaceIdsBind gstorable_bs 
 -- Replace the case_expression and the altenatives.
 replaceIds gstorable_bs other_bs (Case e ev t alts) = do
     let new_e = replaceIds gstorable_bs other_bs e
-        new_alts = map (\(alt, ids, exprs) -> (alt,ids, replaceIds gstorable_bs other_bs exprs)) alts
+#if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
+    let new_alts = map (\(Alt alt ids exprs) -> Alt alt ids (replaceIds gstorable_bs other_bs exprs)) alts
+#else
+    let new_alts = map (\(alt, ids, exprs) -> (alt, ids, replaceIds gstorable_bs other_bs exprs)) alts
+#endif
     Case new_e ev t new_alts
 -- Replace the expression in Cast
 replaceIds gstorable_bs other_bs (Cast e c) = Cast (replaceIds gstorable_bs other_bs e) c
