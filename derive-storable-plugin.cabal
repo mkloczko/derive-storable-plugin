@@ -48,6 +48,9 @@ benchmark plugin-benchmark
   if flag(sumtypes)
     cpp-options: -DGSTORABLE_SUMTYPES
 
+  if impl(ghc < 8.4)
+    build-depends: text < 1.2.5.0
+
 test-suite c_alignment
   type:                exitcode-stdio-1.0
   
