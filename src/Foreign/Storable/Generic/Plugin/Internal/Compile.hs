@@ -45,7 +45,7 @@ import Prelude hiding ((<>))
 import GHC.Core (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt(..), AltCon(..), isId, Unfolding(..))
 import GHC.Types.Literal (Literal(..))
 import GHC.Types.Id      (isLocalId, isGlobalId,setIdInfo, Id)
-import GHC.Types.Id.Info (IdInfo(..))
+import GHC.Types.Id.Info (IdInfo(..), setUnfoldingInfo, unfoldingInfo)
 import GHC.Types.Var             (Var(..))
 import GHC.Types.Name            (getOccName,mkOccName,getSrcSpan)
 import GHC.Types.Name.Occurrence (OccName(..), occNameString)
@@ -77,7 +77,7 @@ import GHC.Builtin.Types.Prim (intPrimTy)
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt, AltCon(..), isId, Unfolding(..))
 import Literal (Literal(..))
 import Id  (isLocalId, isGlobalId,setIdInfo, Id)
-import IdInfo (IdInfo(..))
+import IdInfo (IdInfo(..), setUnfoldingInfo)
 import Var (Var(..))
 import Name (getOccName,mkOccName,getSrcSpan)
 import OccName (OccName(..), occNameString)
@@ -181,7 +181,12 @@ import Foreign.Storable.Generic.Plugin.Internal.Types
 -- | Compile an expression.
 compileExpr :: HscEnv -> CoreExpr -> SrcSpan -> IO a 
 compileExpr hsc_env expr src_span = do
-    foreign_hval <- liftIO $ hscCompileCoreExpr hsc_env src_span expr
+#if MIN_VERSION_GLASGOW_HASKELL(9,4,0,0)
+    (foreign_hval, _, _) <-
+#else
+    foreign_hval <-
+#endif
+      liftIO $ hscCompileCoreExpr hsc_env src_span expr
     hval         <- liftIO $ withForeignRef foreign_hval localRef
     let val = unsafeCoerce hval :: a 
     -- finalizeForeignRef foreign_hval  -- check whether that's the source of the error
@@ -579,8 +584,8 @@ replaceUnfoldingBind b@(NonRec id expr)
     , id_info <- idInfo id
     , unfolding <- unfoldingInfo id_info
     , _ <- uf_tmpl
-    = NonRec (setIdInfo id $ id_info {unfoldingInfo = unfolding{uf_tmpl = expr} } ) expr
-    | otherwise 
+    = NonRec (setIdInfo id $ setUnfoldingInfo id_info unfolding{uf_tmpl = expr} ) expr
+    | otherwise
     = b
     
 

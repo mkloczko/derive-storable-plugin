@@ -113,7 +113,11 @@ install_err flags = do
 install :: [CommandLineOption] -> [CoreToDo] -> CoreM [CoreToDo]
 install opts todos = do
     dyn_flags <- getDynFlags
-    let opt_level = optLevel dyn_flags 
+#if MIN_VERSION_GLASGOW_HASKELL(9,4,0,0)
+    let opt_level = llvmOptLevel dyn_flags
+#else
+    let opt_level = optLevel dyn_flags
+#endif
         flags     = parseOpts opts
         m_phase0  = afterPhase0     todos
         m_spec    = afterSpecialize todos
