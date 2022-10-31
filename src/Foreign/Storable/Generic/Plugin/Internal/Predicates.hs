@@ -241,7 +241,7 @@ isOffsetsId id = getOccName (varName id) == mkOccName N.varName "offsets"
 
 -- | Is a GStorable identifier
 isGStorableId :: Id -> Bool
-isGStorableId id = any ($id) [ isSizeOfId, isAlignmentId, isPeekId
+isGStorableId id = any ($ id) [ isSizeOfId, isAlignmentId, isPeekId
                              , isPokeId, isGStorableInstId
                              , isSpecSizeOfId, isSpecAlignmentId
                              , isSpecPeekId, isSpecPokeId
@@ -253,7 +253,7 @@ isGStorableId id = any ($id) [ isSizeOfId, isAlignmentId, isPeekId
                              ]
 -- | Is the id an GStorable method.
 isGStorableMethodId :: Id -> Bool 
-isGStorableMethodId id = any ($id) [isSizeOfId, isAlignmentId
+isGStorableMethodId id = any ($ id) [isSizeOfId, isAlignmentId
                                    , isPeekId, isPokeId
                                    , isSpecSizeOfId, isSpecAlignmentId
                                    , isSpecPeekId, isSpecPokeId
