@@ -42,7 +42,7 @@ benchmark plugin-benchmark
   default-language:    Haskell2010
   other-modules:       TestCases, TestCasesOptimized
   Main-is:             Main.hs
-  build-depends:       base >= 4.10 && < 5, deepseq, criterion >= 1.1.0
+  build-depends:       base >= 4.10 && < 5, deepseq, criterion >= 1.0.0
                     ,  derive-storable, derive-storable-plugin
 
   if flag(sumtypes)
