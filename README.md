@@ -1,6 +1,6 @@
 # Introduction
 
-[![Build Status](https://travis-ci.org/mkloczko/derive-storable-plugin.svg?branch=master)](https://travis-ci.org/mkloczko/derive-storable-plugin)
+[![Hackage](https://img.shields.io/hackage/v/derive-storable-plugin.svg)](https://hackage.haskell.org/package/derive-storable-plugin) [![Build Status](https://github.com/mkloczko/derive-storable-plugin/workflows/Haskell-CI/badge.svg)](https://github.com/mkloczko/derive-storable-plugin/actions?query=workflow%3AHaskell-CI)
 
 The goal of `derive-storable-plugin` is to support the [derive-storable](http://hackage.haskell.org/package/derive-storable) package. It introduces optimisations to GStorable methods derived using GHC.Generics at core-to-core passes. 
 
