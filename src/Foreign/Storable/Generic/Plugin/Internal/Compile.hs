@@ -547,7 +547,6 @@ offsetSubstitutionTree scope expr
           Just e -> return $ Right e
           Nothing -> return $ Left $ OtherError  (text  "This shouldn't happen."
                                       $$ text "`m_subs <|> Just e` cannot be `Nothing`.")
-    | otherwise = return $ Left $ OtherError $ (text "Unsupported expression:" $$ ppr expr)
 
 -----------------
 -- compilation --
