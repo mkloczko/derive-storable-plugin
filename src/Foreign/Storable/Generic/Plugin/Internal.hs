@@ -11,7 +11,7 @@ Contains methods for calculating type ordering and performing the compile-substi
 -}
 {-#LANGUAGE CPP #-}
 
-module Foreign.Storable.Generic.Plugin.Internal 
+module Foreign.Storable.Generic.Plugin.Internal
     ( groupTypes
     , gstorableSubstitution)
 where
@@ -38,21 +38,31 @@ import GHC.Unit.Module.ModGuts (ModGuts(..))
 #else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
 #endif
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Core.Opt.Pipeline.Types (CoreToDo(..))
+#else
+import GHC.Core.Opt.Monad (CoreTodo(..))
+#endif
 import GHC.Core.Opt.Monad
-    (CoreM, CoreToDo(..), 
-     getHscEnv, getDynFlags, putMsg, putMsgS)
+    (CoreM, getHscEnv, getDynFlags, putMsg, putMsgS)
 import GHC.Types.Basic (CompilerPhase(..))
 import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
 import GHC.Core.TyCon (tyConKind, algTyConRhs, visibleDataCons)
-import GHC.Core.TyCo.Rep (Type(..), TyBinder(..))
+import GHC.Core.TyCo.Rep (Type(..))
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Types.Var (PiTyBinder(..))
+#define TyBinder PiTyBinder
+#else
+import GHC.Core.TyCo.Rep (TyBinder(..))
+#endif
 import GHC.Builtin.Types   (intDataCon)
-import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys)
 import GHC.Core.Make       (mkWildValBinder)
-import GHC.Utils.Outputable 
+import GHC.Utils.Outputable
     (cat, ppr, SDoc, showSDocUnsafe,
-     ($$), ($+$), hsep, vcat, empty,text, 
-     (<>), (<+>), nest, int, colon,hcat, comma, 
-     punctuate, fsep) 
+     ($$), ($+$), hsep, vcat, empty,text,
+     (<>), (<+>), nest, int, colon,hcat, comma,
+     punctuate, fsep)
 import GHC.Core.Opt.Monad (putMsg, putMsgS)
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 import CoreSyn (Bind(..),Expr(..), CoreExpr, CoreBind, CoreProgram, Alt)
@@ -67,21 +77,21 @@ import SrcLoc (noSrcSpan)
 import Unique (getUnique)
 import HscMain (hscCompileCoreExpr)
 import HscTypes (HscEnv,ModGuts(..))
-import CoreMonad 
-    (CoreM, CoreToDo(..), 
+import CoreMonad
+    (CoreM, CoreToDo(..),
      getHscEnv, getDynFlags, putMsg, putMsgS)
 import BasicTypes (CompilerPhase(..))
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (tyConKind, algTyConRhs, visibleDataCons)
 import TyCoRep (Type(..), TyBinder(..))
 import TysWiredIn (intDataCon)
-import DataCon    (dataConWorkId,dataConOrigArgTys) 
+import DataCon    (dataConWorkId,dataConOrigArgTys)
 import MkCore (mkWildValBinder)
-import Outputable 
+import Outputable
     (cat, ppr, SDoc, showSDocUnsafe,
-     ($$), ($+$), hsep, vcat, empty,text, 
-     (<>), (<+>), nest, int, colon,hcat, comma, 
-     punctuate, fsep) 
+     ($$), ($+$), hsep, vcat, empty,text,
+     (<>), (<+>), nest, int, colon,hcat, comma,
+     punctuate, fsep)
 import CoreMonad (putMsg, putMsgS)
 #endif
 
@@ -93,7 +103,7 @@ import Data.Either
 import Data.IORef
 import Debug.Trace
 import Control.Monad.IO.Class
-import Control.Monad 
+import Control.Monad
 
 import Foreign.Storable.Generic.Plugin.Internal.Error
 import Foreign.Storable.Generic.Plugin.Internal.Compile
@@ -127,7 +137,7 @@ groupTypes_errors flags errors = do
             other           -> pprError verb other
         printer errs = case errs of
             [] -> return ()
-            ls ->  putMsg $ print_header (vcat (map print_err errs)) 
+            ls ->  putMsg $ print_header (vcat (map print_err errs))
     -- Do printing
     -- Eventually crash.
     printer errors
@@ -171,7 +181,7 @@ groupTypes flags type_order_ref guts = do
         bad_types_zip id m_t = case m_t of
             Nothing -> Just $ TypeNotFound id
             Just _  -> Nothing
-        bad_types     =    catMaybes $ zipWith bad_types_zip gstorable_ids m_gstorable_types 
+        bad_types     =    catMaybes $ zipWith bad_types_zip gstorable_ids m_gstorable_types
         -- type_list is used instead of type_set because Type has no uniquable instance.
         type_list = [ t | Just t <- m_gstorable_types]
         -- Calculate the type ordering.
@@ -179,7 +189,7 @@ groupTypes flags type_order_ref guts = do
 
     groupTypes_info flags type_order
     groupTypes_errors flags bad_types
-    
+
     liftIO $ writeIORef type_order_ref type_order
     return guts
 
@@ -192,7 +202,7 @@ groupTypes flags type_order_ref guts = do
 -- | Print errors related to CoreBind grouping.
 -- Return the badly grouped bindings, and perhaps crash
 -- the compiler.
-grouping_errors :: Flags            -- ^ Verbosity and ToCrash options 
+grouping_errors :: Flags            -- ^ Verbosity and ToCrash options
                 -> Maybe Error      -- ^ The error
                 -> CoreM [CoreBind] -- ^ Recovered bindings.
 grouping_errors flags m_err = do
@@ -204,10 +214,10 @@ grouping_errors flags m_err = do
        print_header txt = case verb of
            None  -> empty
            other ->    text "Errors while grouping bindings: "
-                    $$ nest 4 txt 
+                    $$ nest 4 txt
        printer m_err = case m_err of
            Nothing  -> return ()
-           Just err ->  putMsg $ print_header (pprError verb err) 
+           Just err ->  putMsg $ print_header (pprError verb err)
        ungroup m_e = case m_e of
            Just (OrderingFailedBinds _ rest) -> rest
            _                                 -> []
@@ -217,7 +227,7 @@ grouping_errors flags m_err = do
 
 
 -- | Print the information related to found GStorable ids.
-foundBinds_info :: Flags    -- ^ Verbosity and ToCrash options 
+foundBinds_info :: Flags    -- ^ Verbosity and ToCrash options
                 -> [Id]     -- ^ GStorable ids.
                 -> CoreM ()
 foundBinds_info flags ids = do
@@ -237,7 +247,7 @@ foundBinds_info flags ids = do
         -- Use eqType for maybes
         eqType_maybe (Just t1) (Just t2) = t1 `eqType` t2
         eqType_maybe _         _         = False
-        -- group and sort the bindings 
+        -- group and sort the bindings
         grouped = groupBy (\i1 i2 -> (getGStorableType $ varType i1) `eqType_maybe` (getGStorableType $ varType i2) ) ids
         sorting = sortBy (\i1 i2 -> varName i1 `compare` varName i2)
         sorted  = map sorting grouped
@@ -247,7 +257,7 @@ foundBinds_info flags ids = do
             (h:_) -> case getGStorableType $ varType h of
                 Just gtype ->     ppr  gtype
                               $+$ (fsep $ punctuate comma (map print_binding the_group))
-                Nothing    -> ppr "Could not get the type of a binding:" 
+                Nothing    -> text "Could not get the type of a binding:"
                               $+$ nest 4 (ppr h <+> text "::" <+> ppr (varType h))
     -- Print the ids
     printer sorted
@@ -257,8 +267,8 @@ gstorableSubstitution :: Flags          -- ^ Verbosity and ToCrash options.
                       -> IORef [[Type]] -- ^ Reference to grouped types.
                       -> ModGuts        -- ^ Information about compiled module.
                       -> CoreM ModGuts  -- ^ Information about compiled module, with GStorable optimisations.
-gstorableSubstitution flags type_order_ref guts = do 
-    type_hierarchy <- liftIO $ readIORef type_order_ref 
+gstorableSubstitution flags type_order_ref guts = do
+    type_hierarchy <- liftIO $ readIORef type_order_ref
     let binds  = mg_binds guts
         -- Get all GStorable binds.
         -- Check whether the type has no constraints.
@@ -267,18 +277,18 @@ gstorableSubstitution flags type_order_ref guts = do
             else getGStorableMethodType t
         -- predicate = toIsBind (withTypeCheck typeCheck isGStorableMethodId)
         predicate = toIsBind (isGStorableMethodId)
-        
+
         (gstorable_binds,rest) = partition predicate binds
         -- Check if there are any recursives somehow
         -- The plugin won't be able to handle them.
         (nonrecs, recs) = partition isNonRecBind gstorable_binds
         -- Group the gstorables by nestedness
         (grouped_binds, m_err_group) = groupBinds type_hierarchy nonrecs
-   
-    foundBinds_info flags $ concatMap getIdsBind $ concat grouped_binds 
+
+    foundBinds_info flags $ concatMap getIdsBind $ concat grouped_binds
     -- Check for errors
     not_grouped <- grouping_errors flags m_err_group
     -- Compile and replace gstorable bindings
     new_gstorables <- compileGroups flags grouped_binds rest -- perhaps return errors here ?
-    
+
     return $ guts {mg_binds = concat [new_gstorables, not_grouped,recs,rest]}

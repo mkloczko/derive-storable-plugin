@@ -9,7 +9,7 @@ Portability : GHC-only
 Grouping methods, both for types and core bindings.
 -}
 {-# LANGUAGE CPP #-}
-module Foreign.Storable.Generic.Plugin.Internal.GroupTypes 
+module Foreign.Storable.Generic.Plugin.Internal.GroupTypes
     (
     -- Type ordering
       calcGroupOrder
@@ -38,12 +38,17 @@ import GHC.Unit.Module.ModGuts (ModGuts(..))
 #else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
 #endif
-import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
+import GHC.Core.Opt.Monad (CoreM)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Core.Opt.Pipeline.Types (CoreToDo(..))
+#else
+import GHC.Core.Opt.Monad (CoreToDo(..))
+#endif
 import GHC.Types.Basic (CompilerPhase(..))
 import GHC.Core.Type hiding (eqType)
 import GHC.Core.TyCon
 import GHC.Builtin.Types   (intDataCon)
-import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys)
 import GHC.Core.Make       (mkWildValBinder)
 import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import GHC.Utils.Outputable (text, (<+>), ($$), nest)
@@ -63,9 +68,9 @@ import HscTypes (HscEnv,ModGuts(..))
 import CoreMonad (CoreM,CoreToDo(..), getHscEnv)
 import BasicTypes (CompilerPhase(..))
 import Type hiding (eqType)
-import TyCon 
+import TyCon
 import TysWiredIn (intDataCon)
-import DataCon    (dataConWorkId,dataConOrigArgTys) 
+import DataCon    (dataConWorkId,dataConOrigArgTys)
 import MkCore (mkWildValBinder)
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import Outputable (text, (<+>), ($$), nest)
@@ -78,7 +83,11 @@ import CoreMonad (putMsg, putMsgS)
 import GHCi.RemoteTypes
 
 
-#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), scaledThing)
+import GHC.Types.Var
+#elif MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
 import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
 import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
 import GHC.Types.Var
@@ -105,8 +114,13 @@ import Foreign.Storable.Generic.Plugin.Internal.Helpers
 import Foreign.Storable.Generic.Plugin.Internal.Predicates
 import Foreign.Storable.Generic.Plugin.Internal.Types
 
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+-- See 778c6adca2c995cd8a1b84394d4d5ca26b915dac
+type TyBinder = PiTyBinder
+type TyCoVarBinder = ForAllTyBinder
+#endif
 
--- | Calculate the order of types. 
+-- | Calculate the order of types.
 calcGroupOrder :: [Type] -> ([[Type]], Maybe Error)
 calcGroupOrder types = calcGroupOrder_rec types []
 
@@ -121,9 +135,9 @@ calcGroupOrder_rec types acc = do
         then (reverse acc, Just $ OrderingFailedTypes (length acc) rest)
         else calcGroupOrder_rec rest (layer':acc)
 
--- | This could be done more efficently if we'd 
+-- | This could be done more efficently if we'd
 -- represent the problem as a graph problem.
-calcGroupOrder_iteration :: [Type] -- ^ Type to check 
+calcGroupOrder_iteration :: [Type] -- ^ Type to check
                          -> [Type] -- ^ Type that are checked
                          -> [Type] -- ^ Type that are in this layer
                          -> [Type] -- ^ Type that are not.
@@ -138,19 +152,19 @@ calcGroupOrder_iteration (t:ts) checked accepted rejected = do
         then calcGroupOrder_iteration ts (t:checked)  accepted    (t:rejected)
         else calcGroupOrder_iteration ts (t:checked) (t:accepted)  rejected
 
--- | Used for type substitution. 
+-- | Used for type substitution.
 -- Whether a TyVar appears, replace it with a Type.
 type TypeScope = (TyVar, Type)
 
 -- | Functions doing the type substitutions.
 
 -- Examples
--- 
+--
 -- substituteTyCon [(a,Int)]           a          = Int
 -- substituteTyCon [(a,Int),(b,Char)] (AType b a) = AType Char Int
 substituteTyCon :: [TypeScope] -> Type -> Type
 substituteTyCon []         tc_app             = tc_app
-substituteTyCon type_scope old@(TyVarTy  ty_var) 
+substituteTyCon type_scope old@(TyVarTy  ty_var)
 -- Substitute simple type variables
     = case find (\(av,_) -> av == ty_var) type_scope of
           Just (_, new_type) -> new_type
@@ -158,11 +172,11 @@ substituteTyCon type_scope old@(TyVarTy  ty_var)
 substituteTyCon type_scope (TyConApp tc args)
 -- Substitute type constructors
     = TyConApp tc $ map (substituteTyCon type_scope) args
-substituteTyCon type_scope t = t 
+substituteTyCon type_scope t = t
 
 -- | Get data constructor arguments from an algebraic type.
 getDataConArgs :: Type -> [Type]
-getDataConArgs t 
+getDataConArgs t
     | isAlgType t
     , Just (tc, ty_args) <- splitTyConApp_maybe t
     , ty_vars <- tyConTyVars tc
@@ -172,9 +186,9 @@ getDataConArgs t
     let type_scope = zip ty_vars ty_args
         data_cons  = concatMap dataConOrigArgTys $ (visibleDataCons.algTyConRhs) tc
 #if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
-    map (substituteTyCon type_scope) (map scaledThing data_cons)  
+    map (substituteTyCon type_scope) (map scaledThing data_cons)
 #else
-    map (substituteTyCon type_scope) data_cons  
+    map (substituteTyCon type_scope) data_cons
 #endif
     | otherwise = []
 
@@ -182,10 +196,10 @@ getDataConArgs t
 
 -- | Group bindings according to type groups.
 groupBinds :: [[Type]]   -- ^ Type groups.
-           -> [CoreBind] -- ^ Should be only NonRecs. 
+           -> [CoreBind] -- ^ Should be only NonRecs.
            -> ([[CoreBind]], Maybe Error)
 -- perhaps add some safety so non-recs won't get here.
-groupBinds type_groups binds = groupBinds_rec type_groups binds [] 
+groupBinds type_groups binds = groupBinds_rec type_groups binds []
 
 -- | Iteration for groupBinds
 groupBinds_rec :: [[Type]]      -- ^ Group of types
@@ -194,8 +208,8 @@ groupBinds_rec :: [[Type]]      -- ^ Group of types
                -> ([[CoreBind]], Maybe Error) -- ^ Grouped bindings, and perhaps an error)
 groupBinds_rec []       []    acc = (reverse acc,Nothing)
 groupBinds_rec (a:as)   []    acc = (reverse acc,Just $ OtherError msg)
-    where msg =    text "Could not find any bindings." 
-                $$ text "Is the second pass placed after main simplifier phases ?" 
+    where msg =    text "Could not find any bindings."
+                $$ text "Is the second pass placed after main simplifier phases ?"
 groupBinds_rec []       binds acc = (reverse acc,Just $ OrderingFailedBinds (length acc) binds)
 groupBinds_rec (tg:tgs) binds acc = do
     let predicate (NonRec id _) = case getGStorableType $ varType id of
@@ -203,6 +217,6 @@ groupBinds_rec (tg:tgs) binds acc = do
             Nothing -> False
         predicate (Rec _) = False
     let (layer, rest) = partition predicate binds
-    if length layer == 0 
+    if length layer == 0
         then (reverse acc, Just $ OrderingFailedBinds (length acc) rest)
         else groupBinds_rec tgs rest (reverse layer:acc)

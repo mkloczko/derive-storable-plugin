@@ -57,12 +57,17 @@ import GHC.Unit.Module.ModGuts (ModGuts(..))
 #else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
 #endif
-import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
+import GHC.Core.Opt.Monad (CoreM)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Core.Opt.Pipeline.Types (CoreToDo(..))
+#else
+import GHC.Core.Opt.Monad (CoreToDo(..))
+#endif
 import GHC.Types.Basic (CompilerPhase(..))
 import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
 import GHC.Core.TyCon (TyCon(..),algTyConRhs, visibleDataCons)
 import GHC.Builtin.Types   (intDataCon)
-import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys)
 import GHC.Core.Make       (mkWildValBinder)
 import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import GHC.Core.Opt.Monad (putMsg, putMsgS)
@@ -83,7 +88,7 @@ import BasicTypes (CompilerPhase(..))
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (TyCon(..),algTyConRhs, visibleDataCons)
 import TysWiredIn (intDataCon)
-import DataCon    (dataConWorkId,dataConOrigArgTys) 
+import DataCon    (dataConWorkId,dataConOrigArgTys)
 import MkCore (mkWildValBinder)
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import CoreMonad (putMsg, putMsgS)
@@ -118,7 +123,11 @@ import Type       (isUnboxedTupleType)
 #endif
 
 
-#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), scaledThing)
+import GHC.Types.Var
+#elif MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
 import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
 import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
 import GHC.Types.Var
@@ -131,6 +140,13 @@ import Var (TyVarBndr(..), TyVarBinder)
 import TyCoRep (Type(..), TyBinder(..))
 import Var
 #endif
+
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+-- See 778c6adca2c995cd8a1b84394d4d5ca26b915dac
+type TyBinder = PiTyBinder
+type TyCoVarBinder = ForAllTyBinder
+#endif
+
 
 -- | Check whether the type is integer
 isIntType :: Type -> Bool
@@ -177,11 +193,11 @@ isStateRealWorld _ = False
 
 -- | Check whether the type constuctor is a GStorable
 isGStorableInstTyCon :: TyCon -> Bool
-isGStorableInstTyCon tc = getOccName (tyConName tc) == mkOccName N.tcClsName "GStorable" 
+isGStorableInstTyCon tc = getOccName (tyConName tc) == mkOccName N.tcClsName "GStorable"
 
 -- | Check whether the type is of kind * -> Constraint.
 hasConstraintKind :: Type -> Bool
-hasConstraintKind ty 
+hasConstraintKind ty
     | TyConApp tc   [a]     <- ty
     , ForAllTy star kind_ty <- tyConKind tc
     , TyConApp k_tc []      <- kind_ty
@@ -211,7 +227,7 @@ hasGStorableConstraints t
 getGStorableInstType :: Type -> Maybe Type
 getGStorableInstType t
     | hasConstraintKind t
-    , TyConApp gstorable [the_t] <- t 
+    , TyConApp gstorable [the_t] <- t
     = Just the_t
     -- Ignore forall a. a, GStorable a =>, etc..
     | ForAllTy _ some_t <- t  = getGStorableInstType some_t
@@ -283,11 +299,11 @@ getPeekType t = getPeekType' t False False
 
 -- | Insides of getPeekType, which takes into the account
 -- the order of arguments.
-getPeekType' :: Type 
+getPeekType' :: Type
              -> Bool -- ^ Is after Ptr
              -> Bool -- ^ Is after Int
              -> Maybe Type -- ^ Returning
-getPeekType' t after_ptr after_int 
+getPeekType' t after_ptr after_int
     -- Last step: IO (TheType)
     | after_ptr, after_int
     , TyConApp io_tc [the_t] <- t
@@ -310,13 +326,13 @@ getPeekType' t after_ptr after_int
     -- Ptr b -> Int -> IO (TheType)
 #if   MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
     | ForAllTy ty_bind fun_t <- t
-    , FunTy _ _ ptr_t rest <- fun_t 
+    , FunTy _ _ ptr_t rest <- fun_t
 #elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
     | ForAllTy ty_bind fun_t <- t
-    , FunTy _ ptr_t rest <- fun_t 
+    , FunTy _ ptr_t rest <- fun_t
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     | ForAllTy ty_bind fun_t <- t
-    , FunTy ptr_t rest <- fun_t 
+    , FunTy ptr_t rest <- fun_t
 #else
     | ForAllTy ty_bind rest <- t
     , Anon ptr_t <- ty_bind
@@ -324,7 +340,7 @@ getPeekType' t after_ptr after_int
     , isPtrType ptr_t
     = getPeekType' rest True False
     -- Ignore other types
-    -- including constraints and 
+    -- including constraints and
     -- Named ty binders.
     | ForAllTy _ some_t <- t
     = getPeekType' some_t after_ptr after_int
@@ -332,17 +348,17 @@ getPeekType' t after_ptr after_int
 
 
 
---isUnboxedTuple2 is State# h 
+--isUnboxedTuple2 is State# h
 
 -- | Get the type from GStorable poke method
 getPokeType :: Type -> Maybe Type
 getPokeType t = getPokeType' t False False
 
-getPokeType' :: Type 
+getPokeType' :: Type
              -> Bool -- ^ Is after Ptr
              -> Bool -- ^ Is after Int
              -> Maybe Type -- ^ Returning
-getPokeType' t after_ptr after_int 
+getPokeType' t after_ptr after_int
     -- Last step: TheType -> IO ()
     | after_ptr, after_int
 #if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
@@ -387,11 +403,11 @@ getPokeType' t after_ptr after_int
 #else
     | ForAllTy ty_bind rest <- t
     , Anon ptr_t <- ty_bind
-#endif 
+#endif
     , isPtrType ptr_t
     = getPokeType' rest True False
     -- Ignore other types
-    -- including constraints and 
+    -- including constraints and
     -- Named ty binders.
     | ForAllTy _ some_t <- t
     = getPokeType' some_t after_ptr after_int

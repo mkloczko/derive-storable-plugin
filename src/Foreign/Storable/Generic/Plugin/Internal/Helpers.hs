@@ -29,12 +29,17 @@ import GHC.Unit.Module.ModGuts (ModGuts(..))
 #else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
 #endif
-import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
+import GHC.Core.Opt.Monad (CoreM)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Core.Opt.Pipeline.Types (CoreToDo(..))
+#else
+import GHC.Core.Opt.Monad (CoreToDo(..))
+#endif
 import GHC.Types.Basic (CompilerPhase(..))
 import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
 import GHC.Core.TyCon (algTyConRhs, visibleDataCons)
 import GHC.Builtin.Types   (intDataCon)
-import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys)
 import GHC.Core.Make       (mkWildValBinder)
 import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import GHC.Core.Opt.Monad (putMsg, putMsgS)
@@ -55,7 +60,7 @@ import BasicTypes (CompilerPhase(..))
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (algTyConRhs, visibleDataCons)
 import TysWiredIn (intDataCon)
-import DataCon    (dataConWorkId,dataConOrigArgTys) 
+import DataCon    (dataConWorkId,dataConOrigArgTys)
 import MkCore (mkWildValBinder)
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import CoreMonad (putMsg, putMsgS)
@@ -66,8 +71,11 @@ import CoreMonad (putMsg, putMsgS)
 -- Used to get to compiled values
 import GHCi.RemoteTypes
 
-
-#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), scaledThing)
+import GHC.Types.Var
+#elif MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
 import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
 import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
 import GHC.Types.Var
@@ -90,6 +98,11 @@ import Data.Maybe
 import Data.Either
 import Control.Monad.IO.Class
 
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+-- See 778c6adca2c995cd8a1b84394d4d5ca26b915dac
+type TyBinder = PiTyBinder
+type TyCoVarBinder = ForAllTyBinder
+#endif
 
 
 -- | Get ids from core bind.
@@ -160,7 +173,9 @@ eqTyBind (Named tvb1) (Named tvb2) = tvb1 `eqTyVarBind` tvb2
 #else
 eqTyBind (Named t1 vis1) (Named t2 vis2) = t1 == t2 && vis1 == vis2
 #endif
-#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+eqTyBind (Anon t1 _) (Anon t2 _) = scaledThing t1 `eqType` scaledThing t2
+#elif MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
 eqTyBind (Anon _ t1) (Anon _ t2) = scaledThing t1 `eqType` scaledThing t2
 #elif MIN_VERSION_GLASGOW_HASKELL(8,10,0,0)
 eqTyBind (Anon _ t1) (Anon _ t2) = t1 `eqType` t2
@@ -171,11 +186,11 @@ eqTyBind _ _ = False
 
 #if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
 eqTyVarBind :: TyVarBinder -> TyVarBinder -> Bool
-eqTyVarBind (Bndr t1 arg1) (Bndr t2 arg2) = t1 == t2 
+eqTyVarBind (Bndr t1 arg1) (Bndr t2 arg2) = t1 == t2
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 -- | Equality for type variable binders
 eqTyVarBind :: TyVarBinder -> TyVarBinder -> Bool
-eqTyVarBind (TvBndr t1 arg1) (TvBndr t2 arg2) = t1 == t2 
+eqTyVarBind (TvBndr t1 arg1) (TvBndr t2 arg2) = t1 == t2
 #endif
 
 -- | 'elem' function for types
@@ -185,7 +200,7 @@ elemType t (ot:ts) = (t `eqType` ot) || elemType t ts
 
 #if MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
 isProxy :: TyCoVarBinder -> Bool
-isProxy (Bndr tycovar flag) 
+isProxy (Bndr tycovar flag)
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
 isProxy :: TyVarBinder -> Bool
 isProxy (TvBndr tycovar flag)
@@ -201,7 +216,7 @@ isProxy (Named tycovar flag)
     , FunTy _ bool star <- varType tycovar
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy bool star <- varType tycovar
-#else 
+#else
     , ForAllTy bool   star <- varType tycovar
 #endif
     = True
@@ -218,7 +233,7 @@ removeProxy t
     , FunTy _  ch   t2 <- t1
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy    ch   t2 <- t1
-#else 
+#else
     , ForAllTy ch'   t2 <- t
     , Anon     ch       <- ch'
 #endif
@@ -235,7 +250,7 @@ removeProxy t
     , FunTy _  ch   t2 <- t1
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy    ch   t2 <- t1
-#else 
+#else
     , ForAllTy ch'   t2 <- t
     , Anon     ch       <- ch'
 #endif
@@ -252,7 +267,7 @@ removeProxy t
     , FunTy _  ch   t2 <- t1
 #elif MIN_VERSION_GLASGOW_HASKELL(8,2,1,0)
     , FunTy    ch   t2 <- t1
-#else 
+#else
     , ForAllTy ch'  t2 <- t
     , Anon     ch      <- ch'
 #endif
