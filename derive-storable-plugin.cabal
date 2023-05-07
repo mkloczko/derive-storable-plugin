@@ -2,7 +2,7 @@
 -- further documentation, see http://haskell.org/cabal/users-guide/
 
 name:                derive-storable-plugin
-version:             0.2.3.6
+version:             0.2.3.7
 synopsis:            GHC core plugin supporting the derive-storable package.
 description:         The package helps derive-storable package in forcing compile time evaluation of
                      sizes, alignments and offsets.

@@ -1,5 +1,9 @@
 # Revision history for generic-storable-plugin
 
+## 0.2.3.7  -- 2023-05-07
+
+* Adding support for GHC 9.6.1 [thanks to TristanCacqueray](https://github.com/mkloczko/derive-storable-plugin/pull/12)
+
 ## 0.2.3.6  -- 2022-10-30
 
 * Adding support for GHC 9.4.2 [thanks to amasgen](https://github.com/mkloczko/derive-storable-plugin/pull/10).
