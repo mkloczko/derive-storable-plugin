@@ -10,8 +10,8 @@ The core of compile and substitute optimisations.
 
 -}
 {-#LANGUAGE CPP#-}
-module Foreign.Storable.Generic.Plugin.Internal.Compile 
-    ( 
+module Foreign.Storable.Generic.Plugin.Internal.Compile
+    (
     -- Compilation
       compileExpr
     , tryCompileExpr
@@ -60,16 +60,21 @@ import GHC.Unit.Module.ModGuts (ModGuts(..))
 #else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
 #endif
-import GHC.Core.Opt.Monad (CoreM,CoreToDo(..),getHscEnv,getDynFlags)
+import GHC.Core.Opt.Monad (CoreM,getHscEnv,getDynFlags)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Core.Opt.Pipeline.Types (CoreToDo(..))
+#else
+import GHC.Core.Opt.Monad (CoreToDo(..))
+#endif
 import GHC.Core.Lint (lintExpr)
 import GHC.Types.Basic (CompilerPhase(..), Boxity(..))
 import GHC.Core.Type
 import GHC.Core.TyCon (algTyConRhs, visibleDataCons)
-import GHC.Builtin.Types   
-import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Builtin.Types
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys)
 import GHC.Core.Make       (mkWildValBinder)
 import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
-import GHC.Utils.Outputable (Outputable(..),($$), ($+$), vcat, empty,text, (<>), (<+>), nest, int, comma) 
+import GHC.Utils.Outputable (Outputable(..),($$), ($+$), vcat, empty,text, (<>), (<+>), nest, int, comma)
 import GHC.Core.Opt.Monad (putMsg, putMsgS)
 import GHC.Builtin.Names  (buildIdKey, augmentIdKey)
 import GHC.Builtin.Types.Prim (intPrimTy)
@@ -91,11 +96,11 @@ import CoreLint (lintExpr)
 import BasicTypes (CompilerPhase(..), Boxity(..))
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (algTyConRhs, visibleDataCons)
-import TysWiredIn 
-import DataCon    (dataConWorkId,dataConOrigArgTys) 
+import TysWiredIn
+import DataCon    (dataConWorkId,dataConOrigArgTys)
 import MkCore (mkWildValBinder)
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
-import Outputable (Outputable(..),($$), ($+$), vcat, empty,text, (<>), (<+>), nest, int, comma) 
+import Outputable (Outputable(..),($$), ($+$), vcat, empty,text, (<>), (<+>), nest, int, comma)
 import CoreMonad (putMsg, putMsgS)
 import PrelNames (buildIdKey, augmentIdKey)
 import TysPrim (intPrimTy)
@@ -107,7 +112,13 @@ import TysPrim (intPrimTy)
 import GHCi.RemoteTypes
 
 
-#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), scaledThing)
+import GHC.Types.Var
+import GHC.Driver.Config.Core.Lint (initLintConfig)
+#define Many ManyTy
+#elif MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
 import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
 import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
 import GHC.Types.Var
@@ -148,13 +159,13 @@ import Literal (LitNumType(..))
 -- import CoreMonad (CoreM,CoreToDo(..), getHscEnv, getDynFlags)
 -- import CoreLint (lintExpr)
 -- import BasicTypes (CompilerPhase(..))
--- -- Haskell types 
+-- -- Haskell types
 -- import Type (isAlgType, splitTyConApp_maybe)
 -- import TyCon (tyConName, algTyConRhs, visibleDataCons)
 -- import TyCoRep (Type(..), TyBinder(..), TyLit(..))
 -- import TysWiredIn
 -- import TysPrim (intPrimTy)
--- import DataCon    (dataConWorkId,dataConOrigArgTys) 
+-- import DataCon    (dataConWorkId,dataConOrigArgTys)
 
 
 import Unsafe.Coerce
@@ -174,12 +185,18 @@ import Foreign.Storable.Generic.Plugin.Internal.Error
 import Foreign.Storable.Generic.Plugin.Internal.Predicates
 import Foreign.Storable.Generic.Plugin.Internal.Types
 
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+-- See 778c6adca2c995cd8a1b84394d4d5ca26b915dac
+type TyBinder = PiTyBinder
+type TyCoVarBinder = ForAllTyBinder
+#endif
+
 ---------------------
 -- compile helpers --
 ---------------------
 
 -- | Compile an expression.
-compileExpr :: HscEnv -> CoreExpr -> SrcSpan -> IO a 
+compileExpr :: HscEnv -> CoreExpr -> SrcSpan -> IO a
 compileExpr hsc_env expr src_span = do
 #if MIN_VERSION_GLASGOW_HASKELL(9,4,0,0)
     (foreign_hval, _, _) <-
@@ -188,7 +205,7 @@ compileExpr hsc_env expr src_span = do
 #endif
       liftIO $ hscCompileCoreExpr hsc_env src_span expr
     hval         <- liftIO $ withForeignRef foreign_hval localRef
-    let val = unsafeCoerce hval :: a 
+    let val = unsafeCoerce hval :: a
     -- finalizeForeignRef foreign_hval  -- check whether that's the source of the error
     return val
 
@@ -196,7 +213,7 @@ compileExpr hsc_env expr src_span = do
 tryCompileExpr :: Id -> CoreExpr -> CoreM (Either Error a)
 tryCompileExpr id core_expr  = do
     hsc_env <- getHscEnv
-    e_compiled <- liftIO $ try $ 
+    e_compiled <- liftIO $ try $
                     compileExpr hsc_env core_expr (getSrcSpan id) :: CoreM (Either SomeException a)
     case e_compiled of
         Left  se  -> return $ Left $ CompilationError (NonRec id core_expr) [stringToPpr $ show se]
@@ -223,9 +240,9 @@ intToExpr t i = Lam wild $ App fun arg
           -- arg = Lit $ MachInt $ fromIntegral i
           arg = intLiteral i
 #if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
-          wild= mkWildValBinder Many t 
+          wild= mkWildValBinder Many t
 #else
-          wild= mkWildValBinder t 
+          wild= mkWildValBinder t
 #endif
 
 -- | For gsizeOf and galignment - calculate the variables.
@@ -239,10 +256,10 @@ intSubstitution b@(NonRec id (Lam l1 l@(Lam l2 e@(Lam l3 expr)))) = do
     hsc_env     <- getHscEnv
     -- Try the subtitution.
     the_integer <- tryCompileExpr id expr :: CoreM (Either Error Int)
-    let m_t      = getGStorableType (varType id) 
+    let m_t      = getGStorableType (varType id)
     case m_t of
         Just t ->  return $ NonRec id <$> (Lam l1 <$> (Lam l2 <$> (intToExpr t <$> the_integer)))
-        Nothing -> 
+        Nothing ->
             return the_integer >> return $ Left $ CompilationError b [text "Type not found"]
 -- Without GSTORABLE_SUMPTYPES
 intSubstitution b@(NonRec id (Lam l1 expr)) = do
@@ -250,15 +267,15 @@ intSubstitution b@(NonRec id (Lam l1 expr)) = do
     hsc_env     <- getHscEnv
     -- Try the subtitution.
     the_integer <- tryCompileExpr id expr :: CoreM (Either Error Int)
-    let m_t      = getGStorableType (varType id) 
+    let m_t      = getGStorableType (varType id)
     case m_t of
         Just t ->  return $ NonRec id <$> (intToExpr t <$> the_integer)
-        Nothing -> 
+        Nothing ->
             return the_integer >> return $ Left $ CompilationError b [text "Type not found"]
 -- For GHC <= 8.6.5
 intSubstitution b@(NonRec id e@(App expr g)) = case expr of
      Lam _ (Lam _ (Lam _ e)) -> intSubstitution $ NonRec id expr
-     App e t                 -> do 
+     App e t                 -> do
         subs <- intSubstitution $ NonRec id e
         case subs of
             Right (NonRec i (Lam l1 (Lam l2 e)) ) -> return (Right $ NonRec i e)
@@ -274,11 +291,11 @@ intSubstitutionWorker id expr = do
     -- Try the subtitution.
     the_integer <- tryCompileExpr id expr :: CoreM (Either Error Int)
     -- Get the type.
-    let m_t      = getGStorableType (varType id) 
+    let m_t      = getGStorableType (varType id)
     case m_t of
         Just t ->  return $ NonRec id <$> (intToExpr t <$> the_integer)
         -- If the compilation error occured, first return it.
-        Nothing -> 
+        Nothing ->
             return the_integer >> return $ Left $ CompilationError (NonRec id expr) [text "Type not found"]
 -----------------------
 -- peek substitution --
@@ -291,10 +308,10 @@ offsetSubstitution b@(NonRec id expr) = do
     e_subs <- offsetSubstitutionTree [] expr
     let ne_subs = case e_subs of
              -- Add the text from other error.
-             Left (OtherError sdoc) 
+             Left (OtherError sdoc)
                  -> Left $ CompilationError b [sdoc]
              -- Add the information about uncompiled expr.
-             Left err@(CompilationError _ _) 
+             Left err@(CompilationError _ _)
                  -> Left $ CompilationError b [pprError Some err]
              a   -> a
 
@@ -312,8 +329,8 @@ getScopeId (IntPrimVal   id _) = id
 
 -- | Get 'CoreExpr' from 'OffsetScope'
 getScopeExpr :: OffsetScope -> CoreExpr
-getScopeExpr (IntList      _ expr) = expr 
-getScopeExpr (IntPrimVal   _ expr) = expr 
+getScopeExpr (IntList      _ expr) = expr
+getScopeExpr (IntPrimVal   _ expr) = expr
 
 instance Outputable OffsetScope where
     ppr (IntList    id expr) = ppr id <+> ppr (getUnique id) <+> comma <+> ppr expr
@@ -325,13 +342,13 @@ instance Outputable OffsetScope where
 
 -- | Create a list expression from Haskell list.
 intListExpr :: [Int] -> CoreExpr
-intListExpr list = intListExpr' (reverse list) empty_list 
+intListExpr list = intListExpr' (reverse list) empty_list
     where empty_list = App ( Var $ dataConWorkId nilDataCon) (Type intTy)
 
 intListExpr' :: [Int] -> CoreExpr -> CoreExpr
 intListExpr'  []    acc = acc
 intListExpr' (l:ls) acc = intListExpr' ls $ App int_cons acc
-    where int_t_cons = App (Var $ dataConWorkId consDataCon) (Type intTy) 
+    where int_t_cons = App (Var $ dataConWorkId consDataCon) (Type intTy)
           int_val    = App (Var $ dataConWorkId intDataCon ) (intLiteral l)
           int_cons   = App int_t_cons int_val
 
@@ -363,10 +380,10 @@ isLitOrGlobal e@(Var id)
     = Just e
 isLitOrGlobal _ = Nothing
 
--- | Check whether the given CoreExpr is an id, 
+-- | Check whether the given CoreExpr is an id,
 -- and if yes - substitute it.
 inScopeAll :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
-inScopeAll (el:rest) e@(Var v_id) 
+inScopeAll (el:rest) e@(Var v_id)
     | id <- getScopeId el
     -- Thought uniques will be unique inside.
     , id == v_id
@@ -378,7 +395,7 @@ inScopeAll _  _ = Nothing
 
 
 -- | Is an "$w!!" identifier
-isIndexer :: Id   
+isIndexer :: Id
           -> Bool
 isIndexer id = getOccName (varName id) == mkOccName N.varName "$w!!"
 
@@ -386,7 +403,7 @@ isIndexer id = getOccName (varName id) == mkOccName N.varName "$w!!"
 -- For !! @Int offsets val expressions.
 caseExprIndex :: [OffsetScope] -> CoreExpr -> Maybe CoreExpr
 caseExprIndex scope expr
-    -- A long list of what needs to be inside the expression. 
+    -- A long list of what needs to be inside the expression.
     | App beg lit <- expr
     -- Substitute or leave the literal be. Otherwise cancel.
     , Just lit_expr <- inScopeAll scope lit <|> isLitOrGlobal lit
@@ -401,37 +418,37 @@ caseExprIndex scope expr
     , isIntType intt
     , isIndexer ix_id
     -- New expression.
-    = Just $ App (App (App ix_var t_int) list_expr) lit_expr 
+    = Just $ App (App (App ix_var t_int) list_expr) lit_expr
     | otherwise = Nothing
 
 
 {- Note [Offset substitution]
  - ~~~~~~~~~~~~~~~~~~~~~~~~~~
  -
- - We would like for gpeekByteOff and gpokeByteOff methods to work as fast as 
+ - We would like for gpeekByteOff and gpokeByteOff methods to work as fast as
  - handwritten versions. This depends on whether the field's offsets are known
- - at compile time or not. 
+ - at compile time or not.
  -
  - To have offsets at compile time we have look for certain expressions to pop up.
  - We need to compile them, and later translate them back to Core expressions.
  - This approach relies on compiler optimisations of GStorable internals,
- - like inlining gpeekByteOff' methods and not inlining the calcOffsets functions. 
+ - like inlining gpeekByteOff' methods and not inlining the calcOffsets functions.
  - If these optimisations do not happen, a compilation error might occur.
- - If not, the resulting method might be not as fast as handwritten one. 
+ - If not, the resulting method might be not as fast as handwritten one.
  -
  -
  - We expect to deal with the following expressions:
  -
- - 
+ -
  - 1) let offsets = ... :: [Int] in expr
  -
  - Here we compile the offsets and put them for later use in expr.
  -
  -
  - 2) case $w!! @Int offsets 0# of _ I# x -> alt_expr
- - or case $w!! @Int ...     0# of _ I# x -> alt_expr   
- - 
- - Here we substitute the offsets if we can, and then we compile the 
+ - or case $w!! @Int ...     0# of _ I# x -> alt_expr
+ -
+ - Here we substitute the offsets if we can, and then we compile the
  - evaluated expression to later replace 'x' occurences in alt_expr.
  -
  -
@@ -471,14 +488,14 @@ offsetSubstitutionTree scope expr
     | Let    offset_bind in_expr     <- expr
     , NonRec offset_id   offset_expr <- offset_bind
     , isOffsetsId offset_id
-    = do 
+    = do
       e_new_s <- exprToIntList offset_id offset_expr
       case e_new_s of
           Left err       -> return $ Left err
           Right int_list -> offsetSubstitutionTree (int_list:scope) in_expr
-    -- Normal let bindings 
+    -- Normal let bindings
     | Let bind in_expr <- expr
-    = do 
+    = do
       subs <- offsetSubstitutionTree scope in_expr
       -- Substitution for the bindings
       let sub_idexpr (id,e) = do
@@ -486,7 +503,7 @@ offsetSubstitutionTree scope expr
               return $ (,) id <$> inner_subs
           sub_bind (NonRec id e) = do
               inner_subs <- offsetSubstitutionTree scope e
-              return $ NonRec id <$> inner_subs 
+              return $ NonRec id <$> inner_subs
           sub_bind (Rec bs) = do
               inner_subs <- mapM sub_idexpr bs
               case lefts inner_subs of
@@ -506,13 +523,13 @@ offsetSubstitutionTree scope expr
 #endif
     , i_prim_con == intDataCon
     , Just new_case_expr <- caseExprIndex scope case_expr
-    = do 
-      e_new_s <- exprToIntVal x_id new_case_expr 
+    = do
+      e_new_s <- exprToIntVal x_id new_case_expr
       case e_new_s of
           Left err       -> return $ Left err
-          Right int_val  -> offsetSubstitutionTree (int_val:scope) alt_expr 
-      
-    -- Normal case expressions. 
+          Right int_val  -> offsetSubstitutionTree (int_val:scope) alt_expr
+
+    -- Normal case expressions.
     | Case case_expr cb t alts <- expr
     = do
 #if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
@@ -533,7 +550,7 @@ offsetSubstitutionTree scope expr
         -- Find the first error in alternative compilation
         let c_err = find (\(_,_,e) -> isLeft e) e_new_alts
         case c_err of
-            Nothing -> return $ Case <$> new_case_expr 
+            Nothing -> return $ Case <$> new_case_expr
                 <*> pure cb <*> pure t <*> pure [mkAlt a b ne | (a,b,Right ne)  <- e_new_alts]
             Just (_,_,err) -> return err
     -- Variable. Return it or try to replace it.
@@ -554,7 +571,7 @@ offsetSubstitutionTree scope expr
 
 
 -- | Compile the expression in Core Bind and replace it.
-compileGStorableBind :: CoreBind -> CoreM (Either Error CoreBind) 
+compileGStorableBind :: CoreBind -> CoreM (Either Error CoreBind)
 compileGStorableBind core_bind
     -- Substitute gsizeOf
     | (NonRec id expr) <- core_bind
@@ -586,7 +603,7 @@ replaceUnfoldingBind b@(NonRec id expr)
     = NonRec (setIdInfo id $ setUnfoldingInfo id_info unfolding{uf_tmpl = expr} ) expr
     | otherwise
     = b
-    
+
 
 -- | Lint a binding
 lintBind :: CoreBind -- ^ Core binding to use when returning CompilationError
@@ -594,7 +611,12 @@ lintBind :: CoreBind -- ^ Core binding to use when returning CompilationError
          -> CoreM (Either Error CoreBind) -- ^ Success or failure
 lintBind b_old b@(NonRec id expr) = do
     dyn_flags <- getDynFlags
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+    let lintConfig = initLintConfig dyn_flags []
+    case lintExpr lintConfig expr of
+#else
     case lintExpr dyn_flags [] expr of
+#endif
         Just sdoc -> do
 #if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
             let err = bagToList sdoc
@@ -606,7 +628,12 @@ lintBind b_old b@(NonRec id expr) = do
             return $ Right b
 lintBind b_old b@(Rec bs) = do
     dyn_flags <- getDynFlags
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+    let lintConfig = initLintConfig dyn_flags []
+    let errs = mapMaybe (\(_,expr) -> lintExpr lintConfig expr) bs
+#else
     let errs = mapMaybe (\(_,expr) -> lintExpr dyn_flags [] expr) bs
+#endif
 #if MIN_VERSION_GLASGOW_HASKELL(9,2,0,0)
     let convert = foldMap bagToList
 #else
@@ -639,11 +666,11 @@ replaceIds gstorable_bs other_bs e@(Var id)
     = replaceIds gstorable_bs other_bs expr
     -- For recs. The substituted component has to be removed.
     | isLocalId id
-    , ([id_here],rest) <- partition (\x -> id `elem` (map fst x)) $ [bs | Rec bs <- gstorable_bs] 
+    , ([id_here],rest) <- partition (\x -> id `elem` (map fst x)) $ [bs | Rec bs <- gstorable_bs]
     , Just (_,expr) <- find ((id==).fst) id_here
     = replaceIds (map Rec rest) other_bs expr
     | isLocalId id
-    , ([id_here],rest) <- partition (\x -> id `elem` (map fst x)) $ [bs | Rec bs <- other_bs] 
+    , ([id_here],rest) <- partition (\x -> id `elem` (map fst x)) $ [bs | Rec bs <- other_bs]
     , Just (_,expr) <- find ((id==).fst) id_here
     = replaceIds gstorable_bs (map Rec rest) expr
     -- If is a global id, or id was not found (local inside the expression) - leave it alone.
@@ -681,7 +708,7 @@ compileGroups flags bind_groups bind_rest = compileGroups_rec flags 0 bind_group
 -- | The insides of compileGroups method.
 compileGroups_rec :: Flags         -- ^ For error handling.
                   -> Int           -- ^ Depth, useful for debugging.
-                  -> [[CoreBind]]  -- ^ Ordered GStorable bindings. 
+                  -> [[CoreBind]]  -- ^ Ordered GStorable bindings.
                   -> [CoreBind]    -- ^ Other top-level bindings
                   -> [CoreBind]    -- ^ Succesfull substitutions.
                   -> [CoreBind]    -- ^ Unsuccesfull substitutions.
@@ -695,13 +722,13 @@ compileGroups_rec flags d (bg:bgs) bind_rest subs not_subs = do
             -- Monad transformers would be nice here.
             case e_compiled of
                 Right bind' -> lintBind bind (replaceUnfoldingBind bind')
-                _           -> return e_compiled 
+                _           -> return e_compiled
     -- Compiled (or not) expressions
     e_compiled <- mapM compile_and_lint layer_replaced
     let errors = lefts e_compiled
-        compiled  = rights e_compiled 
-    
-    -- Handle errors    
+        compiled  = rights e_compiled
+
+    -- Handle errors
     not_compiled <- compileGroups_error flags d errors
     -- Next iteration.
     compileGroups_rec flags (d+1) bgs bind_rest (concat [compiled,subs]) (concat [not_compiled, not_subs])
@@ -720,13 +747,13 @@ compileGroups_error flags d errors = do
        -- Print header for this type of errors
        print_header txt = case verb of
            None  -> empty
-           other ->    text "Errors while compiling and substituting bindings at depth " <+> int d <> text ":" 
-                    $$ nest 4 txt 
+           other ->    text "Errors while compiling and substituting bindings at depth " <+> int d <> text ":"
+                    $$ nest 4 txt
        -- Print errors themselves
        printer errs = case errs of
            [] -> return ()
            -- Print with header
-           ls ->  putMsg $ print_header (vcat (map (pprError verb) errs)) 
+           ls ->  putMsg $ print_header (vcat (map (pprError verb) errs))
        -- Get the bindings from errors.
        ungroup err = case err of
            (CompilationNotSupported bind)   -> Just bind

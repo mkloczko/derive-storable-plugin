@@ -10,7 +10,7 @@ Predicates for finding GStorable identifiers, plus some others.
 
 -}
 {-#LANGUAGE CPP#-}
-module Foreign.Storable.Generic.Plugin.Internal.Predicates 
+module Foreign.Storable.Generic.Plugin.Internal.Predicates
     (
     -- Predicates on identifiers
       isGStorableInstId
@@ -53,13 +53,13 @@ where
 -- import HscTypes (HscEnv,ModGuts(..))
 -- import CoreMonad (CoreM, CoreToDo(..), getHscEnv)
 -- import BasicTypes (CompilerPhase(..))
--- -- Types 
+-- -- Types
 -- import Type (isAlgType, splitTyConApp_maybe)
 -- import TyCon (TyCon,tyConName, algTyConRhs, visibleDataCons)
 -- import TyCoRep (Type(..), TyBinder(..))
 -- import TysWiredIn (intDataCon)
--- import DataCon    (dataConWorkId,dataConOrigArgTys) 
--- 
+-- import DataCon    (dataConWorkId,dataConOrigArgTys)
+--
 -- import MkCore (mkWildValBinder)
 -- -- Printing
 -- import Outputable (cat, ppr, SDoc, showSDocUnsafe)
@@ -82,12 +82,17 @@ import GHC.Unit.Module.ModGuts (ModGuts(..))
 #else
 import GHC.Driver.Types (HscEnv,ModGuts(..))
 #endif
-import GHC.Core.Opt.Monad (CoreM,CoreToDo(..))
+import GHC.Core.Opt.Monad (CoreM)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+import GHC.Core.Opt.Pipeline.Types (CoreToDo(..))
+#else
+import GHC.Core.Opt.Monad (CoreToDo(..))
+#endif
 import GHC.Types.Basic (CompilerPhase(..))
 import GHC.Core.Type (isAlgType, splitTyConApp_maybe)
 import GHC.Core.TyCon (algTyConRhs, visibleDataCons)
 import GHC.Builtin.Types   (intDataCon)
-import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys) 
+import GHC.Core.DataCon    (dataConWorkId,dataConOrigArgTys)
 import GHC.Core.Make       (mkWildValBinder)
 import GHC.Utils.Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import GHC.Core.Opt.Monad (putMsg, putMsgS)
@@ -109,16 +114,20 @@ import BasicTypes (CompilerPhase(..))
 import Type (isAlgType, splitTyConApp_maybe)
 import TyCon (algTyConRhs, visibleDataCons)
 import TysWiredIn (intDataCon)
-import DataCon    (dataConWorkId,dataConOrigArgTys) 
+import DataCon    (dataConWorkId,dataConOrigArgTys)
 import MkCore (mkWildValBinder)
 import Outputable (cat, ppr, SDoc, showSDocUnsafe)
 import CoreMonad (putMsg, putMsgS)
 import Name (nameStableString)
 #endif
 
-#if MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
 import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
-import GHC.Core.TyCo.Rep (Type(..), TyBinder(..), TyCoBinder(..),scaledThing)
+import GHC.Core.TyCo.Rep (Type(..), scaledThing)
+import GHC.Types.Var
+#elif MIN_VERSION_GLASGOW_HASKELL(9,0,1,0)
+import GHC.Types.Var (TyVarBinder(..), VarBndr(..))
+import GHC.Core.TyCo.Rep (Type(..), scaledThing)
 import GHC.Types.Var
 #elif MIN_VERSION_GLASGOW_HASKELL(8,8,1,0)
 import Var (TyVarBinder(..), VarBndr(..))
@@ -130,14 +139,19 @@ import TyCoRep (Type(..), TyBinder(..))
 import Var
 #endif
 
-import Data.Maybe 
+import Data.Maybe
 
 import Foreign.Storable.Generic.Plugin.Internal.Helpers
 
+#if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
+-- See 778c6adca2c995cd8a1b84394d4d5ca26b915dac
+type TyBinder = PiTyBinder
+type TyCoVarBinder = ForAllTyBinder
+#endif
 
 -- | Predicate used to find GStorable instances identifiers.
 isGStorableInstId :: Id -> Bool
-isGStorableInstId id =    cutted_occ_name == gstorable_dict_name 
+isGStorableInstId id =    cutted_occ_name == gstorable_dict_name
                        && cutted_occ_name2 /= gstorable'_dict_name
     where cutted_occ_name = cutOccName 11 $ getOccName (varName id)
           cutted_occ_name2 = cutOccName 12 $ getOccName (varName id)
@@ -146,11 +160,11 @@ isGStorableInstId id =    cutted_occ_name == gstorable_dict_name
 
 -- | Predicate used to find gsizeOf identifiers
 isSizeOfId :: Id -> Bool
-isSizeOfId ident = getOccName (varName ident)    == mkOccName N.varName "$cgsizeOf" 
+isSizeOfId ident = getOccName (varName ident)    == mkOccName N.varName "$cgsizeOf"
 
 -- | Predicate used to find galignment identifiers
 isAlignmentId :: Id -> Bool
-isAlignmentId ident = getOccName (varName ident) == mkOccName N.varName "$cgalignment" 
+isAlignmentId ident = getOccName (varName ident) == mkOccName N.varName "$cgalignment"
 
 -- | Predicate used to find gpeekByteOff identifiers
 isPeekId :: Id -> Bool
@@ -174,7 +188,7 @@ isChoiceSizeOfId id = occStr == compared1 || occStr == compared2
     where occStr    = nameStableString $ varName id
           compared1 = "$_in$$s$fGStorableChoice'Falsea_$cchSizeOf"
           compared2 = "$_in$$s$fGStorableChoice'Truea_$cchSizeOf"
-          
+
 -- | Predicate used to find chAlignment identifiers
 isChoiceAlignmentId :: Id -> Bool
 isChoiceAlignmentId id = occStr == compared1 || occStr == compared2
@@ -212,19 +226,19 @@ isSpecGStorableInstId id = cutted_occ_name == gstorable_dict_name
 
 -- | Predicate used to find specialized gsizeOf identifiers
 isSpecSizeOfId :: Id -> Bool
-isSpecSizeOfId ident = getOccName (varName ident)    == mkOccName N.varName "$s$cgsizeOf" 
+isSpecSizeOfId ident = getOccName (varName ident)    == mkOccName N.varName "$s$cgsizeOf"
 
 -- | Predicate used to find specialized galignment identifiers
 isSpecAlignmentId :: Id -> Bool
-isSpecAlignmentId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgalignment" 
+isSpecAlignmentId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgalignment"
 
 -- | Predicate used to find specialized gpeekByteOff identifiers
 isSpecPeekId :: Id -> Bool
-isSpecPeekId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgpeekByteOff" 
+isSpecPeekId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgpeekByteOff"
 
 -- | Predicate used to find specialized gpokeByteOff identifiers
 isSpecPokeId :: Id -> Bool
-isSpecPokeId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgpokeByteOff" 
+isSpecPokeId ident = getOccName (varName ident) == mkOccName N.varName "$s$cgpokeByteOff"
 
 
 ----------------------------
@@ -252,7 +266,7 @@ isGStorableId id = any ($ id) [ isSizeOfId, isAlignmentId, isPeekId
 #endif
                              ]
 -- | Is the id an GStorable method.
-isGStorableMethodId :: Id -> Bool 
+isGStorableMethodId :: Id -> Bool
 isGStorableMethodId id = any ($ id) [isSizeOfId, isAlignmentId
                                    , isPeekId, isPokeId
                                    , isSpecSizeOfId, isSpecAlignmentId
@@ -262,7 +276,7 @@ isGStorableMethodId id = any ($ id) [isSizeOfId, isAlignmentId
                                    , isChoicePeekId, isChoicePokeId
 #endif
                                    ]
-------------------                                   
+------------------
 -- Miscellanous --
 ------------------
 

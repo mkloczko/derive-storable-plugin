@@ -8,17 +8,14 @@
 #
 # For more information, see https://github.com/haskell-CI/haskell-ci
 #
-# REGENDATA ["github","derive-storable-plugin.cabal"]
+# version: 0.16
+#
+# REGENDATA ("0.16",["github","derive-storable-plugin.cabal"])
 #
 name: Haskell-CI
 on:
-  push:
-    branches:
-      - master
-      - develop/**
-  pull_request:
-    branches:
-      - master
+  - push
+  - pull_request
 jobs:
   linux:
     name: Haskell-CI - Linux - ${{ matrix.compiler }}
@@ -26,11 +23,16 @@ jobs:
     timeout-minutes:
       60
     container:
-      image: buildpack-deps:jammy
+      image: buildpack-deps:bionic
     continue-on-error: ${{ matrix.allow-failure }}
     strategy:
       matrix:
         include:
+          - compiler: ghc-9.6.1
+            compilerKind: ghc
+            compilerVersion: 9.6.1
+            setup-method: ghcup
+            allow-failure: false
           - compiler: ghc-9.4.2
             compilerKind: ghc
             compilerVersion: 9.4.2
@@ -54,22 +56,22 @@ jobs:
           - compiler: ghc-8.8.1
             compilerKind: ghc
             compilerVersion: 8.8.1
-            setup-method: ghcup
+            setup-method: hvr-ppa
             allow-failure: false
           - compiler: ghc-8.6.5
             compilerKind: ghc
             compilerVersion: 8.6.5
-            setup-method: ghcup
+            setup-method: hvr-ppa
             allow-failure: false
           - compiler: ghc-8.4.2
             compilerKind: ghc
             compilerVersion: 8.4.2
-            setup-method: ghcup
+            setup-method: hvr-ppa
             allow-failure: false
           - compiler: ghc-8.2.2
             compilerKind: ghc
             compilerVersion: 8.2.2
-            setup-method: ghcup
+            setup-method: hvr-ppa
             allow-failure: false
       fail-fast: false
     steps:
@@ -77,11 +79,21 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends gnupg ca-certificates dirmngr curl git software-properties-common libtinfo5
-          mkdir -p "$HOME/.ghcup/bin"
-          curl -sL https://downloads.haskell.org/ghcup/0.1.18.0/x86_64-linux-ghcup-0.1.18.0 > "$HOME/.ghcup/bin/ghcup"
-          chmod a+x "$HOME/.ghcup/bin/ghcup"
-          "$HOME/.ghcup/bin/ghcup" install ghc "$HCVER" || (cat "$HOME"/.ghcup/logs/*.* && false)
-          "$HOME/.ghcup/bin/ghcup" install cabal 3.6.2.0 || (cat "$HOME"/.ghcup/logs/*.* && false)
+          if [ "${{ matrix.setup-method }}" = ghcup ]; then
+            mkdir -p "$HOME/.ghcup/bin"
+            curl -sL https://downloads.haskell.org/ghcup/0.1.19.2/x86_64-linux-ghcup-0.1.19.2 > "$HOME/.ghcup/bin/ghcup"
+            chmod a+x "$HOME/.ghcup/bin/ghcup"
+            "$HOME/.ghcup/bin/ghcup" install ghc "$HCVER" || (cat "$HOME"/.ghcup/logs/*.* && false)
+            "$HOME/.ghcup/bin/ghcup" install cabal 3.10.1.0 || (cat "$HOME"/.ghcup/logs/*.* && false)
+          else
+            apt-add-repository -y 'ppa:hvr/ghc'
+            apt-get update
+            apt-get install -y "$HCNAME"
+            mkdir -p "$HOME/.ghcup/bin"
+            curl -sL https://downloads.haskell.org/ghcup/0.1.19.2/x86_64-linux-ghcup-0.1.19.2 > "$HOME/.ghcup/bin/ghcup"
+            chmod a+x "$HOME/.ghcup/bin/ghcup"
+            "$HOME/.ghcup/bin/ghcup" install cabal 3.10.1.0 || (cat "$HOME"/.ghcup/logs/*.* && false)
+          fi
         env:
           HCKIND: ${{ matrix.compilerKind }}
           HCNAME: ${{ matrix.compiler }}
@@ -93,11 +105,20 @@ jobs:
           echo "CABAL_DIR=$HOME/.cabal" >> "$GITHUB_ENV"
           echo "CABAL_CONFIG=$HOME/.cabal/config" >> "$GITHUB_ENV"
           HCDIR=/opt/$HCKIND/$HCVER
-          HC=$HOME/.ghcup/bin/$HCKIND-$HCVER
-          echo "HC=$HC" >> "$GITHUB_ENV"
-          echo "HCPKG=$HOME/.ghcup/bin/$HCKIND-pkg-$HCVER" >> "$GITHUB_ENV"
-          echo "HADDOCK=$HOME/.ghcup/bin/haddock-$HCVER" >> "$GITHUB_ENV"
-          echo "CABAL=$HOME/.ghcup/bin/cabal-3.6.2.0 -vnormal+nowrap" >> "$GITHUB_ENV"
+          if [ "${{ matrix.setup-method }}" = ghcup ]; then
+            HC=$HOME/.ghcup/bin/$HCKIND-$HCVER
+            echo "HC=$HC" >> "$GITHUB_ENV"
+            echo "HCPKG=$HOME/.ghcup/bin/$HCKIND-pkg-$HCVER" >> "$GITHUB_ENV"
+            echo "HADDOCK=$HOME/.ghcup/bin/haddock-$HCVER" >> "$GITHUB_ENV"
+            echo "CABAL=$HOME/.ghcup/bin/cabal-3.10.1.0 -vnormal+nowrap" >> "$GITHUB_ENV"
+          else
+            HC=$HCDIR/bin/$HCKIND
+            echo "HC=$HC" >> "$GITHUB_ENV"
+            echo "HCPKG=$HCDIR/bin/$HCKIND-pkg" >> "$GITHUB_ENV"
+            echo "HADDOCK=$HCDIR/bin/haddock" >> "$GITHUB_ENV"
+            echo "CABAL=$HOME/.ghcup/bin/cabal-3.10.1.0 -vnormal+nowrap" >> "$GITHUB_ENV"
+          fi
+
           HCNUMVER=$(${HC} --numeric-version|perl -ne '/^(\d+)\.(\d+)\.(\d+)(\.(\d+))?$/; print(10000 * $1 + 100 * $2 + ($3 == 0 ? $5 != 1 : $3))')
           echo "HCNUMVER=$HCNUMVER" >> "$GITHUB_ENV"
           echo "ARG_TESTS=--enable-tests" >> "$GITHUB_ENV"
@@ -132,10 +153,6 @@ jobs:
             url: http://hackage.haskell.org/
           EOF
           cat >> $CABAL_CONFIG <<EOF
-          jobs: 2
-          EOF
-          GHCJOBS=-j2
-          cat >> $CABAL_CONFIG <<EOF
           program-default-options
             ghc-options: $GHCJOBS +RTS -M3G -RTS
           EOF
@@ -148,41 +165,23 @@ jobs:
       - name: update cabal index
         run: |
           $CABAL v2-update -v
-      - name: cache (tools)
-        uses: actions/cache@v2
-        with:
-          key: ${{ runner.os }}-${{ matrix.compiler }}-tools-ddfe230f
-          path: ~/.haskell-ci-tools
       - name: install cabal-plan
         run: |
           mkdir -p $HOME/.cabal/bin
-          curl -sL https://github.com/haskell-hvr/cabal-plan/releases/download/v0.6.2.0/cabal-plan-0.6.2.0-x86_64-linux.xz > cabal-plan.xz
-          echo 'de73600b1836d3f55e32d80385acc055fd97f60eaa0ab68a755302685f5d81bc  cabal-plan.xz' | sha256sum -c -
+          curl -sL https://github.com/haskell-hvr/cabal-plan/releases/download/v0.7.3.0/cabal-plan-0.7.3.0-x86_64-linux.xz > cabal-plan.xz
+          echo 'f62ccb2971567a5f638f2005ad3173dba14693a45154c1508645c52289714cb2  cabal-plan.xz' | sha256sum -c -
           xz -d < cabal-plan.xz > $HOME/.cabal/bin/cabal-plan
           rm -f cabal-plan.xz
           chmod a+x $HOME/.cabal/bin/cabal-plan
           cabal-plan --version
-      - name: install cabal-docspec
-        run: |
-          mkdir -p $HOME/.cabal/bin
-          curl -sL https://github.com/phadej/cabal-extras/releases/download/cabal-docspec-0.0.0.20211114/cabal-docspec-0.0.0.20211114.xz > cabal-docspec.xz
-          echo 'e224700d9e8c9ec7ec6bc3f542ba433cd9925a5d356676c62a9bd1f2c8be8f8a  cabal-docspec.xz' | sha256sum -c -
-          xz -d < cabal-docspec.xz > $HOME/.cabal/bin/cabal-docspec
-          rm -f cabal-docspec.xz
-          chmod a+x $HOME/.cabal/bin/cabal-docspec
-          cabal-docspec --version
-      - name: install doctest
-        run: |
-          if [ $((HCNUMVER < 90000)) -ne 0 ] ; then $CABAL --store-dir=$HOME/.haskell-ci-tools/store v2-install $ARG_COMPILER --ignore-project -j2 doctest --constraint='doctest ^>=0.20' ; fi
-          if [ $((HCNUMVER < 90000)) -ne 0 ] ; then doctest --version ; fi
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           path: source
       - name: initial cabal.project for sdist
         run: |
           touch cabal.project
-          echo "packages: $GITHUB_WORKSPACE/source/" >> cabal.project
+          echo "packages: $GITHUB_WORKSPACE/source/." >> cabal.project
           cat cabal.project
       - name: sdist
         run: |
@@ -200,28 +199,19 @@ jobs:
           touch cabal.project
           touch cabal.project.local
           echo "packages: ${PKGDIR_derive_storable_plugin}" >> cabal.project
+          echo "package derive-storable-plugin" >> cabal.project
+          echo "    ghc-options: -Werror=missing-methods" >> cabal.project
           cat >> cabal.project <<EOF
-          package *
-            ghc-options: -Werror=missing-methods
           EOF
-          cat >> cabal.project <<EOF
-          package derive-storable-plugin
-            ghc-options: -Werror
-
-          keep-going: False
-
-          package bytestring
-            tests: False
-          EOF
-          $HCPKG list --simple-output --names-only | perl -ne 'for (split /\s+/) { print "constraints: $_ installed\n" unless /^(Cabal|derive-storable-plugin)$/; }' >> cabal.project.local
+          $HCPKG list --simple-output --names-only | perl -ne 'for (split /\s+/) { print "constraints: $_ installed\n" unless /^(derive-storable-plugin)$/; }' >> cabal.project.local
           cat cabal.project
           cat cabal.project.local
       - name: dump install plan
         run: |
           $CABAL v2-build $ARG_COMPILER $ARG_TESTS $ARG_BENCH --dry-run all
           cabal-plan
-      - name: cache
-        uses: actions/cache@v2
+      - name: restore cache
+        uses: actions/cache/restore@v3
         with:
           key: ${{ runner.os }}-${{ matrix.compiler }}-${{ github.sha }}
           path: ~/.cabal/store
@@ -239,31 +229,20 @@ jobs:
       - name: tests
         run: |
           $CABAL v2-test $ARG_COMPILER $ARG_TESTS $ARG_BENCH all --test-show-details=direct
-      - name: doctest
-        run: |
-          perl -i -e 'while (<ARGV>) { print unless /package-id\s+(base-compat-batteries|bs-cmpt-bttrs)-\d+(\.\d+)*/; }' .ghc.environment.*
-          if [ $((HCNUMVER < 90000)) -ne 0 ] ; then cd ${PKGDIR_derive_storable_plugin} || false ; fi
-          if [ $((HCNUMVER < 90000)) -ne 0 ] ; then doctest --fast -XHaskell2010 src ; fi
-      - name: docspec
-        run: |
-          $CABAL v2-build $ARG_COMPILER $ARG_TESTS $ARG_BENCH all
-          cabal-docspec $ARG_COMPILER --verbose --timeout 2
       - name: cabal check
         run: |
           cd ${PKGDIR_derive_storable_plugin} || false
           ${CABAL} -vnormal check
       - name: haddock
         run: |
-          $CABAL v2-haddock --haddock-all $ARG_COMPILER --with-haddock $HADDOCK $ARG_TESTS $ARG_BENCH all
+          $CABAL v2-haddock --disable-documentation --haddock-all $ARG_COMPILER --with-haddock $HADDOCK $ARG_TESTS $ARG_BENCH all
       - name: unconstrained build
         run: |
           rm -f cabal.project.local
           $CABAL v2-build $ARG_COMPILER --disable-tests --disable-benchmarks all
-      - name: prepare for constraint sets
-        run: |
-          rm -f cabal.project.local
-      - name: constraint set deepseq-1.4
-        run: |
-          if [ $((HCNUMVER < 80400)) -ne 0 ] ; then $CABAL v2-build $ARG_COMPILER --disable-tests --disable-benchmarks --constraint='deepseq ==1.4.*' --constraint='binary installed' --dependencies-only -j2 all ; fi
-          if [ $((HCNUMVER < 80400)) -ne 0 ] ; then $CABAL v2-build $ARG_COMPILER --disable-tests --disable-benchmarks --constraint='deepseq ==1.4.*' --constraint='binary installed' all ; fi
-          if [ $((HCNUMVER < 80400)) -ne 0 ] ; then $CABAL v2-haddock --haddock-all $ARG_COMPILER --with-haddock $HADDOCK --disable-tests --disable-benchmarks --constraint='deepseq ==1.4.*' --constraint='binary installed' all ; fi
+      - name: save cache
+        uses: actions/cache/save@v3
+        if: always()
+        with:
+          key: ${{ runner.os }}-${{ matrix.compiler }}-${{ github.sha }}
+          path: ~/.cabal/store
