@@ -41,7 +41,7 @@ import GHC.Driver.Types (HscEnv,ModGuts(..))
 #if MIN_VERSION_GLASGOW_HASKELL(9,6,0,0)
 import GHC.Core.Opt.Pipeline.Types (CoreToDo(..))
 #else
-import GHC.Core.Opt.Monad (CoreTodo(..))
+import GHC.Core.Opt.Monad (CoreToDo(..))
 #endif
 import GHC.Core.Opt.Monad
     (CoreM, getHscEnv, getDynFlags, putMsg, putMsgS)
